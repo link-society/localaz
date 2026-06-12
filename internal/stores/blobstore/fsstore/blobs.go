@@ -107,13 +107,25 @@ func (s *Store) DeleteBlob(acct, cname, name string) error {
 	return nil
 }
 
-func (s *Store) ListBlobs(acct, cname, prefix, delimiter string) ([]blobstore.BlobInfo, []string, error) {
+// maxListResults is Azure's default and maximum page size for List Blobs.
+const maxListResults = 5000
+
+func (s *Store) ListBlobs(acct, cname, prefix, delimiter string, maxResults int, marker string) ([]blobstore.BlobInfo, []string, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	c, err := s.lookupContainer(acct, cname)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
+
+	// Clamp the page size to Azure's bounds; <=0 (or unset) means the max/default.
+	if maxResults <= 0 || maxResults > maxListResults {
+		maxResults = maxListResults
+	}
+	// The marker is an opaque base64url token naming the entry to resume AFTER. A
+	// malformed marker is treated as empty (list from the beginning).
+	resumeAfter := decodeMarker(marker)
+
 	var names []string
 	for name := range c.blobs {
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
@@ -126,22 +138,46 @@ func (s *Store) ListBlobs(acct, cname, prefix, delimiter string) ([]blobstore.Bl
 	var blobs []blobstore.BlobInfo
 	prefixSet := map[string]struct{}{}
 	var prefixes []string
+	count := 0
+	nextMarker := ""
 	for _, name := range names {
+		// Collapse delimiter-bearing names into their virtual directory prefix.
+		key := name
+		isPrefix := false
 		if delimiter != "" {
 			rest := name[len(prefix):]
 			if idx := strings.Index(rest, delimiter); idx >= 0 {
-				vp := prefix + rest[:idx+len(delimiter)]
-				if _, seen := prefixSet[vp]; !seen {
-					prefixSet[vp] = struct{}{}
-					prefixes = append(prefixes, vp)
+				key = prefix + rest[:idx+len(delimiter)]
+				isPrefix = true
+				if _, seen := prefixSet[key]; seen {
+					// Already emitted this virtual directory; do not double-count.
+					continue
 				}
-				continue
 			}
 		}
-		info := c.blobs[name].info
-		info.Props.Metadata = cloneMeta(c.blobs[name].info.Props.Metadata)
-		blobs = append(blobs, info)
+		// Skip everything up to and including the resume point.
+		if resumeAfter != "" && key <= resumeAfter {
+			if isPrefix {
+				prefixSet[key] = struct{}{}
+			}
+			continue
+		}
+		// Page is full: more entries remain, so emit a continuation token.
+		if count >= maxResults {
+			nextMarker = encodeMarker(resumeAfter)
+			break
+		}
+		if isPrefix {
+			prefixSet[key] = struct{}{}
+			prefixes = append(prefixes, key)
+		} else {
+			info := c.blobs[name].info
+			info.Props.Metadata = cloneMeta(c.blobs[name].info.Props.Metadata)
+			blobs = append(blobs, info)
+		}
+		count++
+		resumeAfter = key
 	}
 	sort.Strings(prefixes)
-	return blobs, prefixes, nil
+	return blobs, prefixes, nextMarker, nil
 }

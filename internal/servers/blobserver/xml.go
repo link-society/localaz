@@ -91,12 +91,15 @@ type xmlBlobProps struct {
 	ServerEncrypted bool   `xml:"ServerEncrypted"`
 }
 
-func marshalBlobs(endpoint, containerName, prefix, delimiter string, blobs []blobstore.BlobInfo, prefixes []string) ([]byte, error) {
+func marshalBlobs(endpoint, containerName, prefix, delimiter, marker string, maxResults int, blobs []blobstore.BlobInfo, prefixes []string, nextMarker string) ([]byte, error) {
 	res := enumBlobsResult{
 		ServiceEndpoint: endpoint,
 		ContainerName:   containerName,
 		Prefix:          prefix,
+		Marker:          marker,
+		MaxResults:      maxResults,
 		Delimiter:       delimiter,
+		NextMarker:      nextMarker,
 	}
 	for _, b := range blobs {
 		ct := b.Props.ContentType

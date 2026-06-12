@@ -2,6 +2,7 @@ package fsstore
 
 import (
 	"crypto/md5"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -51,6 +52,25 @@ func streamToFile(dst string, src io.Reader) (sum []byte, n int64, err error) {
 // newETag derives an Azure-style ETag from a modification timestamp.
 func newETag(t time.Time) string {
 	return fmt.Sprintf("\"0x%X\"", t.UnixNano())
+}
+
+// encodeMarker turns a resume-after key into the opaque base64url continuation
+// token handed back to clients as <NextMarker>.
+func encodeMarker(name string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(name))
+}
+
+// decodeMarker reverses encodeMarker. A malformed token decodes to the empty
+// string, which the caller treats as "list from the beginning".
+func decodeMarker(marker string) string {
+	if marker == "" {
+		return ""
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(marker)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }
 
 // cloneMeta returns a copy of the metadata map. The result is never nil.

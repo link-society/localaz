@@ -255,6 +255,20 @@ same image.
   late bind failure on one listener drains every other listener; only `main`
   calls `os.Exit(1)` (on a non-nil return). Keep new listeners on this path —
   never `os.Exit` from inside a serve goroutine.
+- **List Blobs is paginated.** The handler honors the `maxresults` (int) and
+  `marker` query params and returns one page at a time, matching Azure instead of
+  dumping the whole container in one response. `maxresults` is clamped to
+  `1..5000` (the Azure default/cap; `<=0` means 5000). The `marker` is an opaque
+  base64url continuation token naming the entry to resume AFTER (a malformed
+  marker is treated as empty / start-from-the-beginning); the response echoes the
+  REQUEST marker in `<Marker>` and returns the next page's token in
+  `<NextMarker>` (empty when the listing is exhausted). Pages are emitted in
+  lexicographic blob-name order, and a delimiter-collapsed virtual directory
+  (`<BlobPrefix>`) counts toward `maxresults` the same as a blob. The
+  `blobstore.Store` interface signature is
+  `ListBlobs(account, container, prefix, delimiter string, maxResults int, marker string) (blobs []BlobInfo, prefixes []string, nextMarker string, err error)`.
+  (List **Containers** pagination is still out of scope — it returns the full set
+  with an empty `<NextMarker>`.)
 
 ## Control plane (AAD + ARM) gotchas
 
