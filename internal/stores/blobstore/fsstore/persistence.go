@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"localaz.dev/internal/stores/blobstore"
+	"localaz.dev/internal/utils/atomicfile"
 )
 
 // load rebuilds the in-memory index from whatever state is persisted under the
@@ -86,11 +87,11 @@ func (s *Store) persistContainer(acct string, c *container) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, containerMetaFile), raw, 0o644)
+	return atomicfile.Write(filepath.Join(dir, containerMetaFile), raw, 0o644)
 }
 
-// persistBlobMeta writes a blob's metadata JSON to disk. The data file itself
-// is written separately by the streaming write path.
+// persistBlobMeta writes a blob's metadata JSON to disk crash-safely. The data
+// file itself is written separately by the streaming write path (streamToFile).
 func (s *Store) persistBlobMeta(acct, cname string, b *blobEntry) error {
 	if err := os.MkdirAll(filepath.Join(s.containerDir(acct, cname), metaDir), 0o755); err != nil {
 		return err
@@ -99,5 +100,5 @@ func (s *Store) persistBlobMeta(acct, cname string, b *blobEntry) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.blobMetaPath(acct, cname, b.info.Name), raw, 0o644)
+	return atomicfile.Write(s.blobMetaPath(acct, cname, b.info.Name), raw, 0o644)
 }

@@ -46,6 +46,7 @@ internal/stores/armstore       in-memory ARM state (one subscription/tenant + gr
 internal/utils/httpx           shared HTTP helpers
 internal/utils/azwire          shared Azure wire-format helpers
 internal/utils/azerr           faithful Azure error responses
+internal/utils/atomicfile      crash-safe file writes (temp + fsync + rename + dir fsync)
 internal/utils/devcert               self-signed TLS material for the control plane
 test/sdk                       integration tests via the Azure Go SDKs (+ README.md)
 test/cli                       end-to-end tests via the Azure CLI, build tag: cli (+ README.md)
@@ -197,8 +198,16 @@ same image.
 - **Persistence (Blob/Queue/Table).** State lives under `/data`; mount a volume
   to keep it across restarts. `fsstore` keeps only blob *metadata* in memory and
   rebuilds that index from disk on startup; `queuestore` and `tablestore` each
-  load and atomically rewrite a single JSON document (`<root>/queue/queues.json`,
-  `<root>/table/tables.json`).
+  load and rewrite a single JSON document (`<root>/queue/queues.json`,
+  `<root>/table/tables.json`). Every on-disk write — the queue/table JSON
+  snapshots plus the blob meta and container meta files — goes through
+  `internal/utils/atomicfile.Write` (temp file → fsync → rename → parent-dir
+  fsync), and the streamed blob data file is written the same crash-safe way
+  (`streamToFile`/`assembleBlocks` fsync the temp file before renaming and fsync
+  the parent dir after). A crash therefore leaves either the old file or the
+  fully written new one, never a truncated file or blob data without its meta.
+  The `persistLocked` helpers keep their void signature and treat write errors as
+  best-effort; durability is the guarantee.
 - **Blob data is streamed, never buffered.** The `blobstore.Store` interface
   uses `io.Reader`/`io.ReadCloser` for blob bodies, not `[]byte`, so large or
   concurrent blobs do not OOM the server. `PutBlob` streams the request body to

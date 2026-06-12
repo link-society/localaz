@@ -92,6 +92,11 @@ func (s *Store) assembleBlocks(acct, cname, name string, blockIDs []string) (int
 		}
 		total += n
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return 0, err
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
 		return 0, err
@@ -99,6 +104,11 @@ func (s *Store) assembleBlocks(acct, cname, name string, blockIDs []string) (int
 	if err := os.Rename(tmpName, dst); err != nil {
 		_ = os.Remove(tmpName)
 		return 0, err
+	}
+	// Fsync the parent directory so the rename survives a crash (best-effort).
+	if dir, derr := os.Open(filepath.Dir(dst)); derr == nil {
+		_ = dir.Sync()
+		dir.Close()
 	}
 	return total, nil
 }

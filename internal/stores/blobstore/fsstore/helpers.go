@@ -30,11 +30,20 @@ func streamToFile(dst string, src io.Reader) (sum []byte, n int64, err error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	if err = tmp.Sync(); err != nil {
+		return nil, 0, err
+	}
 	if err = tmp.Close(); err != nil {
 		return nil, 0, err
 	}
 	if err = os.Rename(tmpName, dst); err != nil {
 		return nil, 0, err
+	}
+	// Fsync the parent directory so the rename itself survives a crash
+	// (best-effort; some platforms disallow syncing a directory).
+	if dir, derr := os.Open(filepath.Dir(dst)); derr == nil {
+		_ = dir.Sync()
+		dir.Close()
 	}
 	return h.Sum(nil), n, nil
 }

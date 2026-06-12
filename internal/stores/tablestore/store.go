@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"localaz.dev/internal/utils/atomicfile"
 )
 
 // Store holds every account's tables. It is safe for concurrent use.
@@ -56,17 +58,15 @@ func (s *Store) load() error {
 	return json.Unmarshal(data, &s.accounts)
 }
 
-// persistLocked writes the current state atomically. The caller must hold s.mu.
+// persistLocked writes the current state crash-safely (temp file + fsync +
+// rename + parent-dir fsync via atomicfile). The caller must hold s.mu. Errors
+// are best-effort: durability, not error propagation, is the goal here.
 func (s *Store) persistLocked() {
 	data, err := json.Marshal(s.accounts)
 	if err != nil {
 		return
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, s.path)
+	_ = atomicfile.Write(s.path, data, 0o644)
 }
 
 // lookupLocked returns the named table or ErrTableNotFound. Caller holds s.mu.
