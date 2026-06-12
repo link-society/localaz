@@ -55,11 +55,6 @@ func (s *Server) serveClient(w http.ResponseWriter, r *http.Request, rest string
 		return
 	}
 
-	c := &wsConn{
-		connID: newConnID(),
-		user:   claims.Subject,
-		socket: socket,
-		hub:    s.manager.hub(hubName),
-	}
+	c := newWSConn(newConnID(), claims.Subject, socket, s.manager.hub(hubName), outboundBuffer)
 	c.run(claims.Groups)
 }

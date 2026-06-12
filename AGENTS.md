@@ -149,6 +149,14 @@ same image.
   advertised 64 KiB max-frame-size (`maxFrameSize` in `frame.go`, the single
   source of truth shared with `conn.onOpen`); otherwise a ~12-byte crafted frame
   could trigger an unauthenticated multi-GB allocation / OOM.
+- **Web PubSub connections never block the hub.** Each `wsConn` owns a buffered
+  outbound channel drained by a dedicated writer goroutine; `send` is a
+  non-blocking enqueue (`select`/`default`). The hub holds only an `RLock` while
+  fanning out, so a slow/stalled client can never stall a broadcast or block
+  add/remove/join/leave. If the outbound buffer fills, that connection is
+  dropped (`closeNow`) rather than slowing the producer. Inbound frames are
+  size-limited via `SetReadLimit` (1 MiB). The socket is accessed through the
+  `wsSocket` interface so it can be stubbed in tests.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
   Monitor Logs do not persist — their traffic is transient, so there is no
   `/data` format for them. The AAD/ARM control plane is in-memory too (one
