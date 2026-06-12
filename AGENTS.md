@@ -203,6 +203,12 @@ same image.
 - **JWTs are hand-rolled RS256** (crypto/rsa, no third-party dep) and verify
   against the published JWKS; tokens, client id and secret are accepted but
   never validated (opt-in only, like the storage Shared Key).
+- **The RS256 signing key is persisted** to `<data>/aad/signing-key.pem`
+  (PKCS#8 PEM, `0o600`). `aadserver.New(dataDir)` loads it when present and
+  generates+writes it otherwise; the kid is derived from the modulus, so it is
+  **stable across restarts** (it used to be regenerated per process, which
+  broke tokens minted before a restart and stale cached JWKS). With an empty
+  data dir the key is generated in-memory only.
 - **ARM resource providers are generic.** `armserver/provider.go` stores any
   `.../providers/{ns}/{type}/{name}` body in `armstore` and echoes it back with
   a terminal `provisioningState=Succeeded`, which is enough for the CLI's
