@@ -99,7 +99,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	run(ctx, logger, services, amqp, tlsCert)
+	if err := run(ctx, logger, services, amqp, tlsCert); err != nil {
+		os.Exit(1)
+	}
 }
 
 // service describes one emulated Azure service mounted on its own HTTP listener.
@@ -119,11 +121,31 @@ type amqpService struct {
 	server *sbserver.Server
 }
 
-// run starts every service and blocks until the context is cancelled, then
-// gracefully shuts them all down.
-func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqpService, tlsCert *tls.Certificate) {
+// run starts every service and blocks until the context is cancelled or a
+// listener fails, then gracefully shuts them all down. It returns the listener
+// error (if any) so main can decide the process exit code; a serve failure on
+// one listener no longer hard-kills the others via os.Exit.
+func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqpService, tlsCert *tls.Certificate) error {
 	var wg sync.WaitGroup
 	servers := make([]*http.Server, 0, len(services))
+
+	// Bind the AMQP listener before starting any serve goroutine so a bind
+	// failure here is returned cleanly without leaving HTTP servers running.
+	amqpListener, err := net.Listen("tcp", amqp.addr)
+	if err != nil {
+		return fmt.Errorf("listen servicebus: %w", err)
+	}
+
+	// errc carries the first non-graceful serve error from any goroutine. It is
+	// buffered so a goroutine never blocks on send, and we only read one value.
+	errc := make(chan error, 1)
+	reportErr := func(svc string, err error) {
+		logger.Error("serve", "service", svc, "err", err)
+		select {
+		case errc <- fmt.Errorf("serve %s: %w", svc, err):
+		default:
+		}
+	}
 
 	for _, svc := range services {
 		srv := &http.Server{
@@ -148,28 +170,26 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 				err = srv.ListenAndServe()
 			}
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("serve", "service", svc.name, "err", err)
-				os.Exit(1)
+				reportErr(svc.name, err)
 			}
 		}(svc, srv, useTLS)
 	}
 
-	amqpListener, err := net.Listen("tcp", amqp.addr)
-	if err != nil {
-		logger.Error("listen", "service", "servicebus", "err", err)
-		os.Exit(1)
-	}
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		logger.Info("service listening", "service", "servicebus", "addr", amqp.addr)
 		if err := amqp.server.Serve(amqpListener); err != nil && !errors.Is(err, net.ErrClosed) {
-			logger.Error("serve", "service", "servicebus", "err", err)
-			os.Exit(1)
+			reportErr("servicebus", err)
 		}
 	}()
 
-	<-ctx.Done()
+	// Shut down on either a cancelled context or the first serve failure.
+	var runErr error
+	select {
+	case <-ctx.Done():
+	case runErr = <-errc:
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -181,6 +201,7 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 	_ = amqpListener.Close()
 	wg.Wait()
 	logger.Info("stopped")
+	return runErr
 }
 
 func envOr(key, fallback string) string {
