@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Go modules — grouped into a single PR.
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: []
+    commit-message:
+      prefix: ":arrow_up:"
+    groups:
+      go:
+        patterns:
+          - "*"
+
+  # GitHub Actions — grouped into a single PR.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: []
+    commit-message:
+      prefix: ":arrow_up: :construction_worker:"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Docker base images — grouped into a single PR.
+  - package-ecosystem: docker
+    directory: "/docker"
+    schedule:
+      interval: weekly
+    labels: []
+    commit-message:
+      prefix: ":arrow_up: :whale:"
+    groups:
+      docker:
+        patterns:
+          - "*"
