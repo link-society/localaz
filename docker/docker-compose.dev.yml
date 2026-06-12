@@ -16,13 +16,17 @@ services:
       - "10000:10000"
       - "10001:10001"
       - "10002:10002"
+      - "10003:10003"
+      - "10004:10004"
       - "5672:5672"
     volumes:
       - localaz-data:/data
     environment:
       LOCALAZ_BLOB_ADDR: ":10000"
-      LOCALAZ_EVENTGRID_ADDR: ":10001"
-      LOCALAZ_WEBPUBSUB_ADDR: ":10002"
+      LOCALAZ_QUEUE_ADDR: ":10001"
+      LOCALAZ_TABLE_ADDR: ":10002"
+      LOCALAZ_EVENTGRID_ADDR: ":10003"
+      LOCALAZ_WEBPUBSUB_ADDR: ":10004"
       LOCALAZ_SERVICEBUS_ADDR: ":5672"
       LOCALAZ_DATA_DIR: "/data"
 

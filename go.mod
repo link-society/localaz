@@ -4,10 +4,12 @@ go 1.25.0
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.1
+	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.4.1
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.10.0
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub v0.1.1
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces v1.0.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.7.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.1
 	github.com/gorilla/websocket v1.5.3
 )
 

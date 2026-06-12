@@ -4,9 +4,10 @@ A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 (GCP). You run a single Docker container and point the **Azure CLI** or any
 **Azure SDK** at it — no code changes required.
 
-It currently emulates **Blob Storage**, **Event Grid** (namespace topics, pull
-delivery), **Web PubSub**, and **Service Bus** (queues and topics over AMQP),
-each on its own port but all inside the one process and container.
+It currently emulates **Blob Storage**, **Queue Storage**, **Table Storage**,
+**Event Grid** (namespace topics, pull delivery), **Web PubSub**, and **Service
+Bus** (queues and topics over AMQP), each on its own port but all inside the one
+process and container.
 
 ## Quick start
 
@@ -21,8 +22,10 @@ The services are then available at:
 | Service     | Endpoint                                   |
 | ----------- | ------------------------------------------ |
 | Blob        | `http://127.0.0.1:10000/devstoreaccount1`  |
-| Event Grid  | `http://127.0.0.1:10001`                   |
-| Web PubSub  | `http://127.0.0.1:10002`                   |
+| Queue       | `http://127.0.0.1:10001/devstoreaccount1`  |
+| Table       | `http://127.0.0.1:10002/devstoreaccount1`  |
+| Event Grid  | `http://127.0.0.1:10003`                   |
+| Web PubSub  | `http://127.0.0.1:10004`                   |
 | Service Bus | `sb://127.0.0.1:5672` (AMQP)               |
 
 Generate a connection string for your shell (matches Azurite's well-known
@@ -41,6 +44,12 @@ SDKs pick up automatically.
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
 az storage blob list --container-name demo -o table
+
+az storage queue create --name work-items
+az storage message put --queue-name work-items --content "hello"
+
+az storage table create --name people
+az storage entity insert --table-name people --entity PartitionKey=team RowKey=alice Name=Alice
 ```
 
 ### With the Go SDK
@@ -81,13 +90,10 @@ task env:conn-string # print an export line for the connection string
 
 - [Architecture](ARCHITECTURE.md) — process layout and design decisions.
 - [Configuration](docs/configuration.md) — flags, env vars, endpoint and credentials.
-- [Supported APIs](docs/supported-apis.md) — implemented Blob operations and roadmap.
+- [Supported APIs](docs/supported-apis.md) — implemented operations and roadmap.
 - [Testing](docs/testing.md) — running the suites and why the E2E suite is in Go.
 - [AGENTS.md](AGENTS.md) — guide for AI agents and contributors working on the code.
 
 ## Roadmap
 
-- Queue Storage
-- Table Storage
-- Service Bus (pub/sub)
 - Optional Shared Key signature verification

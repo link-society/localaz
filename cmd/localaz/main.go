@@ -20,15 +20,21 @@ import (
 	"localaz.dev/internal/blobstore/fsstore"
 	"localaz.dev/internal/egserver"
 	"localaz.dev/internal/egstore"
+	"localaz.dev/internal/queueserver"
+	"localaz.dev/internal/queuestore"
 	"localaz.dev/internal/sbserver"
 	"localaz.dev/internal/sbstore"
+	"localaz.dev/internal/tableserver"
+	"localaz.dev/internal/tablestore"
 	"localaz.dev/internal/wpsserver"
 )
 
 func main() {
 	blobAddr := flag.String("addr", envOr("LOCALAZ_BLOB_ADDR", ":10000"), "blob service listen address")
-	eventGridAddr := flag.String("eventgrid-addr", envOr("LOCALAZ_EVENTGRID_ADDR", ":10001"), "event grid service listen address")
-	webPubSubAddr := flag.String("webpubsub-addr", envOr("LOCALAZ_WEBPUBSUB_ADDR", ":10002"), "web pubsub service listen address")
+	queueAddr := flag.String("queue-addr", envOr("LOCALAZ_QUEUE_ADDR", ":10001"), "queue service listen address")
+	tableAddr := flag.String("table-addr", envOr("LOCALAZ_TABLE_ADDR", ":10002"), "table service listen address")
+	eventGridAddr := flag.String("eventgrid-addr", envOr("LOCALAZ_EVENTGRID_ADDR", ":10003"), "event grid service listen address")
+	webPubSubAddr := flag.String("webpubsub-addr", envOr("LOCALAZ_WEBPUBSUB_ADDR", ":10004"), "web pubsub service listen address")
 	serviceBusAddr := flag.String("servicebus-addr", envOr("LOCALAZ_SERVICEBUS_ADDR", ":5672"), "service bus AMQP listen address")
 	dataDir := flag.String("data", envOr("LOCALAZ_DATA_DIR", "/data"), "directory for persisted state")
 	flag.Parse()
@@ -42,8 +48,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	queueStore, err := queuestore.New(*dataDir)
+	if err != nil {
+		logger.Error("init queue store", "err", err)
+		os.Exit(1)
+	}
+
+	tableStore, err := tablestore.New(*dataDir)
+	if err != nil {
+		logger.Error("init table store", "err", err)
+		os.Exit(1)
+	}
+
 	services := []service{
 		{name: "blob", addr: *blobAddr, handler: blobserver.New(blobStore)},
+		{name: "queue", addr: *queueAddr, handler: queueserver.New(queueStore)},
+		{name: "table", addr: *tableAddr, handler: tableserver.New(tableStore)},
 		{name: "eventgrid", addr: *eventGridAddr, handler: egserver.New(egstore.New())},
 		{name: "webpubsub", addr: *webPubSubAddr, handler: wpsserver.New()},
 	}

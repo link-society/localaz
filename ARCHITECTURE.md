@@ -13,6 +13,10 @@ cmd/localaz            entrypoint / process wiring (one listener per service)
 internal/blobserver    Azure Blob REST protocol (routing, XML, headers, errors)
 internal/blobstore     storage abstraction (the Store interface)
   └── fsstore          filesystem-backed implementation (in-memory index + disk)
+internal/queueserver   Azure Queue REST protocol (XML messages, pop receipts)
+internal/queuestore    queue + message store (in-memory index, JSON persistence)
+internal/tableserver   Azure Table REST protocol (OData JSON, $filter, ETags)
+internal/tablestore    entity store (in-memory index, JSON persistence)
 internal/egserver      Event Grid REST protocol (namespace topics, pull delivery)
 internal/egstore       in-memory Event Grid pub/sub state
 internal/wpsserver     Web PubSub (REST + WebSocket json.webpubsub.azure.v1)
@@ -30,9 +34,15 @@ docs/                  configuration, supported APIs, testing
 | Service     | Port    | Protocol          | Packages                       |
 | ----------- | ------- | ----------------- | ------------------------------ |
 | Blob        | `10000` | HTTP/REST         | `blobserver` + `blobstore`     |
-| Event Grid  | `10001` | HTTP/REST         | `egserver` + `egstore`         |
-| Web PubSub  | `10002` | HTTP + WebSocket  | `wpsserver`                    |
+| Queue       | `10001` | HTTP/REST         | `queueserver` + `queuestore`   |
+| Table       | `10002` | HTTP/REST (OData) | `tableserver` + `tablestore`   |
+| Event Grid  | `10003` | HTTP/REST         | `egserver` + `egstore`         |
+| Web PubSub  | `10004` | HTTP + WebSocket  | `wpsserver`                    |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `sbserver` + `sbstore`         |
+
+Blob, Queue and Table share Azurite's `UseDevelopmentStorage=true` ports
+(`10000`/`10001`/`10002`); the pub/sub services, which have no Azurite
+convention, follow on `10003`/`10004`.
 
 `cmd/localaz` starts each HTTP service on its own `http.Server` goroutine and
 starts Service Bus on a raw `net.Listen` accept loop (AMQP is not HTTP), then
@@ -81,6 +91,11 @@ On-disk layout:
 where `<key>` is the URL-safe base64 encoding of the blob name (blob names may
 contain `/`, which is not filesystem-safe).
 
+Queue and Table use the same in-memory-index-plus-write-through approach, but
+their state is small and structured, so each persists a single JSON document
+(`<root>/queue/queues.json`, `<root>/table/tables.json`) that is rewritten
+atomically on every mutation and reloaded on startup.
+
 ## Authentication
 
 The emulator accepts the Shared Key `Authorization` header that the SDKs and CLI
@@ -91,7 +106,7 @@ is on the roadmap as an opt-in mode.
 
 ## Adding a service
 
-A new service (Queue, Table, …) follows the same pattern:
+A new service follows the same pattern Queue and Table did:
 
 1. Define a storage interface for the service under `internal/<svc>store`.
 2. Implement the protocol in `internal/<svc>server`, depending only on that

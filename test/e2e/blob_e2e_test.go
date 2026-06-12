@@ -21,8 +21,13 @@ const (
 	accountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
 )
 
-// blobEndpoint is the endpoint under test, resolved by TestMain.
-var blobEndpoint string
+// blobEndpoint, queueEndpoint and tableEndpoint are the storage endpoints under
+// test, resolved by TestMain.
+var (
+	blobEndpoint  string
+	queueEndpoint string
+	tableEndpoint string
+)
 
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("az"); err != nil {
@@ -36,18 +41,20 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	os.Setenv("AZURE_STORAGE_CONNECTION_STRING", connectionString(blobEndpoint))
+	os.Setenv("AZURE_STORAGE_CONNECTION_STRING", connectionString())
 	code := m.Run()
 	stop()
 	os.Exit(code)
 }
 
-// setup resolves the endpoint, launching a local emulator when one is not
+// setup resolves the endpoints, launching a local emulator when one is not
 // supplied via LOCALAZ_E2E_ENDPOINT, and returns a teardown function.
 func setup() (func(), error) {
 	if ep := os.Getenv("LOCALAZ_E2E_ENDPOINT"); ep != "" {
 		blobEndpoint = ep
-		if err := waitForReady(blobEndpoint); err != nil {
+		queueEndpoint = os.Getenv("LOCALAZ_E2E_QUEUE_ENDPOINT")
+		tableEndpoint = os.Getenv("LOCALAZ_E2E_TABLE_ENDPOINT")
+		if err := waitForReady(blobEndpoint + "?comp=list"); err != nil {
 			return nil, err
 		}
 		return func() {}, nil
@@ -71,25 +78,41 @@ func setup() (func(), error) {
 		return nil, fmt.Errorf("build emulator: %w", err)
 	}
 
-	port, err := freePort()
+	blobAddr, queueAddr, tableAddr, err := threeFreeAddrs()
 	if err != nil {
 		os.RemoveAll(tmp)
 		return nil, err
 	}
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	blobEndpoint = fmt.Sprintf("http://%s/%s", addr, account)
+	blobEndpoint = fmt.Sprintf("http://%s/%s", blobAddr, account)
+	queueEndpoint = fmt.Sprintf("http://%s/%s", queueAddr, account)
+	tableEndpoint = fmt.Sprintf("http://%s/%s", tableAddr, account)
 
-	srv := exec.Command(bin, "-addr", addr, "-data", filepath.Join(tmp, "data"))
+	// Bind the services we do not exercise to ephemeral ports so the suite
+	// never collides with a real Azurite or a previous run.
+	srv := exec.Command(bin,
+		"-addr", blobAddr,
+		"-queue-addr", queueAddr,
+		"-table-addr", tableAddr,
+		"-eventgrid-addr", "127.0.0.1:0",
+		"-webpubsub-addr", "127.0.0.1:0",
+		"-servicebus-addr", "127.0.0.1:0",
+		"-data", filepath.Join(tmp, "data"))
 	srv.Stdout, srv.Stderr = os.Stdout, os.Stderr
 	if err := srv.Start(); err != nil {
 		os.RemoveAll(tmp)
 		return nil, fmt.Errorf("start emulator: %w", err)
 	}
 
-	if err := waitForReady(blobEndpoint); err != nil {
-		_ = srv.Process.Kill()
-		os.RemoveAll(tmp)
-		return nil, err
+	for _, ready := range []string{
+		blobEndpoint + "?comp=list",
+		queueEndpoint + "?comp=list",
+		tableEndpoint + "/Tables",
+	} {
+		if err := waitForReady(ready); err != nil {
+			_ = srv.Process.Kill()
+			os.RemoveAll(tmp)
+			return nil, err
+		}
 	}
 
 	return func() {
@@ -97,6 +120,22 @@ func setup() (func(), error) {
 		_, _ = srv.Process.Wait()
 		os.RemoveAll(tmp)
 	}, nil
+}
+
+// threeFreeAddrs reserves three distinct loopback ports for the blob, queue and
+// table listeners.
+func threeFreeAddrs() (blob, queue, table string, err error) {
+	ports := make([]int, 0, 3)
+	for len(ports) < 3 {
+		p, perr := freePort()
+		if perr != nil {
+			return "", "", "", perr
+		}
+		ports = append(ports, p)
+	}
+	return fmt.Sprintf("127.0.0.1:%d", ports[0]),
+		fmt.Sprintf("127.0.0.1:%d", ports[1]),
+		fmt.Sprintf("127.0.0.1:%d", ports[2]), nil
 }
 
 func freePort() (int, error) {
@@ -108,10 +147,10 @@ func freePort() (int, error) {
 	return ln.Addr().(*net.TCPAddr).Port, nil
 }
 
-func waitForReady(endpoint string) error {
+func waitForReady(url string) error {
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(endpoint + "?comp=list")
+		resp, err := http.Get(url)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -120,13 +159,13 @@ func waitForReady(endpoint string) error {
 		}
 		time.Sleep(150 * time.Millisecond)
 	}
-	return fmt.Errorf("emulator did not become ready at %s", endpoint)
+	return fmt.Errorf("emulator did not become ready at %s", url)
 }
 
-func connectionString(endpoint string) string {
+func connectionString() string {
 	return fmt.Sprintf(
-		"DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=%s;",
-		account, accountKey, endpoint,
+		"DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=%s;QueueEndpoint=%s;TableEndpoint=%s;",
+		account, accountKey, blobEndpoint, queueEndpoint, tableEndpoint,
 	)
 }
 

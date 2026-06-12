@@ -7,15 +7,17 @@ Guidance for AI agents and contributors working on localaz.
 localaz is a local **Azure emulator**: a single Go process (shipped as one
 Docker container) that speaks the native Azure service protocols so the Azure
 CLI and the official SDKs work against it unchanged. It currently emulates Blob
-Storage, Event Grid, Web PubSub, and Service Bus, each on its own port but all
-in the one process. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
+Storage, Queue Storage, Table Storage, Event Grid, Web PubSub, and Service Bus,
+each on its own port but all in the one process. See
+[ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
 
 - Module path: `localaz.dev`
 - Go version: 1.26
-- The **storage** path (Blob) is kept dependency-light; the `azblob` SDK is used
-  only in the test suite. The **pub/sub** services (Event Grid, Web PubSub,
-  Service Bus) are allowed third-party dependencies — notably `azservicebus` and
-  `go-amqp` for the Service Bus AMQP transport.
+- The **storage** paths (Blob, Queue, Table) are kept dependency-light; the
+  `azblob`, `azqueue` and `aztables` SDKs are used only in the test suite. The
+  **pub/sub** services (Event Grid, Web PubSub, Service Bus) are allowed
+  third-party dependencies — notably `azservicebus` and `go-amqp` for the
+  Service Bus AMQP transport.
 
 ## Repository layout
 
@@ -24,6 +26,10 @@ cmd/localaz            entrypoint / process wiring (one listener per service)
 internal/blobserver    Azure Blob REST protocol (routing, XML, headers, errors)
 internal/blobstore     storage abstraction (the Store interface) + types
   └── fsstore          filesystem-backed implementation
+internal/queueserver   Azure Queue REST protocol (XML messages, pop receipts)
+internal/queuestore    in-memory queue/message state + JSON persistence
+internal/tableserver   Azure Table REST protocol (OData JSON, $filter, ETags)
+internal/tablestore    in-memory entity state + JSON persistence
 internal/egserver      Event Grid REST protocol (namespace topics, pull delivery)
 internal/egstore       in-memory Event Grid pub/sub state
 internal/wpsserver     Web PubSub (REST + WebSocket)
@@ -41,12 +47,16 @@ docs/                  configuration, supported APIs, testing
 | Service     | Port    | Protocol          | Flag / env                                       |
 | ----------- | ------- | ----------------- | ------------------------------------------------ |
 | Blob        | `10000` | HTTP/REST         | `-addr` / `LOCALAZ_BLOB_ADDR`                    |
-| Event Grid  | `10001` | HTTP/REST         | `-eventgrid-addr` / `LOCALAZ_EVENTGRID_ADDR`     |
-| Web PubSub  | `10002` | HTTP + WebSocket  | `-webpubsub-addr` / `LOCALAZ_WEBPUBSUB_ADDR`     |
+| Queue       | `10001` | HTTP/REST         | `-queue-addr` / `LOCALAZ_QUEUE_ADDR`             |
+| Table       | `10002` | HTTP/REST (OData) | `-table-addr` / `LOCALAZ_TABLE_ADDR`             |
+| Event Grid  | `10003` | HTTP/REST         | `-eventgrid-addr` / `LOCALAZ_EVENTGRID_ADDR`     |
+| Web PubSub  | `10004` | HTTP + WebSocket  | `-webpubsub-addr` / `LOCALAZ_WEBPUBSUB_ADDR`     |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
 The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
-tooling; do not rename it.
+tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
+`UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
+pub/sub services moved to `10003`/`10004`.
 
 ## Conventions
 
@@ -54,12 +64,15 @@ tooling; do not rename it.
   Put shared helpers in a `helpers.go` (or similarly named) file. `fsstore` is
   the reference for this: `store.go`, `types.go`, `paths.go`, `helpers.go`,
   `persistence.go`, `containers.go`, `blobs.go`, `blocks.go`.
-- **The protocol layer depends only on the `blobstore.Store` interface.** Never
-  let `internal/blobserver` reach into a concrete backend.
+- **The protocol layer depends only on the store interface.** Never let a
+  `*server` package reach into a concrete backend; depend on the
+  `<svc>store.Store` type only.
 - **Stay faithful to the Azure wire format.** XML element names, header casing,
   and date formats must match what the SDKs expect (e.g. `<Etag>` not `<ETag>`,
-  `Last-Modified` as RFC1123 GMT). When in doubt, check what the Go SDK or CLI
-  actually sends/parses rather than guessing.
+  `Last-Modified` as RFC1123 GMT). Blob and Queue speak XML; Table speaks OData
+  **JSON** (responses and errors), with `Timestamp` as ISO 8601 with seven
+  fractional digits and a weak `odata.etag`. When in doubt, check what the Go
+  SDK or CLI actually sends/parses rather than guessing.
 - Run `task fmt` and keep `task lint` (gofmt + `go vet`) clean.
 
 ## Build, run, and test
@@ -109,10 +122,20 @@ same image.
   are decoded.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, and Service Bus do not
   persist — their traffic is transient, so there is no `/data` format for them.
+- **Table merge arrives as HTTP `PATCH`.** The `aztables` SDK issues `PATCH`
+  (not the `MERGE` verb) for merge updates; `internal/tableserver` accepts both.
+  Upsert is a `PUT`/`PATCH` with no `If-Match`; `If-Match: *` requires the
+  entity to exist, and a weak ETag enforces optimistic concurrency.
+- **Table `$filter` is a documented subset.** Only `eq`/`ne`/`gt`/`ge`/`lt`/`le`
+  over string/number/bool literals combined with `and`/`or` and parentheses are
+  supported — no OData functions, typed literals, or continuation tokens.
 - **Docker `/data` permissions.** The runtime image is distroless `nonroot`
   (uid 65532). The Dockerfile creates `/data` in the build stage and copies it
   with `--chown=65532:65532` so the non-root user can write to it.
-- **Persistence (Blob).** State lives under `/data`; mount a volume to keep it
-  across restarts. `fsstore` rebuilds its in-memory index from disk on startup.
+- **Persistence (Blob/Queue/Table).** State lives under `/data`; mount a volume
+  to keep it across restarts. `fsstore` rebuilds its in-memory blob index from
+  disk on startup; `queuestore` and `tablestore` each load and atomically
+  rewrite a single JSON document (`<root>/queue/queues.json`,
+  `<root>/table/tables.json`).
 - **Blob name encoding.** Blob names may contain `/`. On disk they are stored
   under a URL-safe base64 key; do not assume a 1:1 path mapping.
