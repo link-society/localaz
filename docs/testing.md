@@ -6,10 +6,12 @@ localaz has two complementary suites.
 
 Driven by the official **Azure Go SDKs** — `azblob` for Blob, `azqueue` for
 Queue, `aztables` for Table, `aznamespaces` for Event Grid, `azwebpubsub` for
-Web PubSub, `azservicebus` for Service Bus, and the `monitor/ingestion/azlogs` /
-`monitor/query/azlogs` clients for Monitor Logs. Each test starts an in-process
-emulator and exercises it through the same client code a real Go application
-would use. This is fast, hermetic, and needs no Docker or external tools.
+Web PubSub, `azservicebus` for Service Bus, the `monitor/ingestion/azlogs` /
+`monitor/query/azlogs` clients for Monitor Logs, and `azidentity` plus
+`armsubscriptions` / `armresources` for the Entra ID + Resource Manager control
+plane. Each test starts an in-process emulator and exercises it through the
+same client code a real Go application would use. This is fast, hermetic, and
+needs no Docker or external tools.
 
 ```bash
 task test:unit
@@ -69,19 +71,39 @@ be redirected to a local endpoint, and skips the rest:
   commands, but they resolve the target endpoint from ARM via `-n`/`-g`; there
   is no `--connection-string` or `--endpoint` override to redirect them to
   `127.0.0.1`.
-- **Monitor Logs** — the CLI cannot drive either data plane of this service.
-  There is **no log-ingestion command** at all (`az monitor data-collection`
-  only manages DCR/DCE resources on the ARM management plane). The one
-  data-plane command, `az monitor log-analytics query`, has no `--endpoint`
-  override: it resolves its host from the active cloud's ARM metadata, requires
-  an AAD bearer token (`az login`), and azure-core refuses to send that token
-  over plain HTTP. Redirecting it to `127.0.0.1` would mean standing up a fake
-  AAD + ARM + TLS control plane in the harness, which is out of scope.
+- **Entra ID + Resource Manager (control plane)** and **Monitor Logs** — see
+  the control-plane subsection below; the CLI signs in to the emulated AAD/ARM
+  and runs `az monitor log-analytics query` against localaz end to end.
 
-For the pub/sub and Monitor Logs services the **SDK suite** above is the
-equivalent end-to-end signal: it drives the official clients against localaz
-over the real protocol, which the CLI is simply unable to do locally. When
-launched by the suite, the
+### Control plane: Entra ID + Resource Manager + Monitor query
+
+`TestControlPlaneCLI` is the flagship end-to-end test. It launches localaz with
+TLS (`-tls-auto`), registers it as a custom Azure cloud, signs in with a service
+principal, manages a resource group, and runs `az monitor log-analytics query`
+— all through the real `az` CLI:
+
+1. Reserve free ports for Monitor/AAD/ARM and start localaz with `-tls-auto`
+   and `-arm-cloud-name`; read the generated `<data>/tls/localaz.crt`.
+2. Isolate the CLI with a throwaway `AZURE_CONFIG_DIR` (so the developer's real
+   clouds, logins and active cloud are never touched), while pointing
+   `AZURE_EXTENSION_DIR` at the real extension dir so the `log-analytics`
+   extension is available. The test skips if that extension is not installed.
+3. Set `REQUESTS_CA_BUNDLE` and `SSL_CERT_FILE` to the generated cert (the
+   latter is needed for the CLI's metadata fetch), and
+   `ARM_CLOUD_METADATA_URL` to the ARM `/metadata/endpoints` document.
+4. Register and select the custom cloud (name must equal `-arm-cloud-name`),
+   then `az login --service-principal --tenant adfs` (the ADFS authority makes
+   MSAL skip public instance discovery).
+5. Assert `az account show`, `az group create/list/delete`, seed log records
+   via the Logs Ingestion API, and assert `az monitor log-analytics query`
+   returns them.
+
+This is exactly the flow a developer would use to point the Azure CLI at
+localaz, proven against the real CLI on every run.
+
+For the pub/sub services the **SDK suite** above is the equivalent end-to-end
+signal: it drives the official clients against localaz over the real protocol,
+which the CLI is simply unable to do locally. When launched by the suite, the
 connection string includes the Blob, Queue and Table endpoints; in
 `LOCALAZ_E2E_ENDPOINT` mode the queue and table tests additionally read
 `LOCALAZ_E2E_QUEUE_ENDPOINT` and `LOCALAZ_E2E_TABLE_ENDPOINT` (skipping if

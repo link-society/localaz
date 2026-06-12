@@ -24,6 +24,10 @@ internal/sbserver      Service Bus AMQP 1.0 protocol (hand-rolled framing/codec)
 internal/sbstore       in-memory Service Bus broker (queues + topic fan-out)
 internal/monitorserver Monitor Logs REST protocol (ingestion + KQL-subset query)
 internal/monitorstore  in-memory Monitor Logs tables
+internal/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
+internal/armserver     Resource Manager: cloud metadata, subscriptions, groups
+internal/armstore      in-memory ARM state (one subscription/tenant + groups)
+internal/devcert       self-signed TLS material for the control plane
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
 test/e2e               end-to-end tests via the Azure CLI
@@ -41,11 +45,16 @@ docs/                  configuration, supported APIs, testing
 | Event Grid  | `10003` | HTTP/REST         | `egserver` + `egstore`         |
 | Web PubSub  | `10004` | HTTP + WebSocket  | `wpsserver`                    |
 | Monitor Logs| `10005` | HTTP/REST         | `monitorserver` + `monitorstore` |
+| Entra ID    | `10006` | HTTP/REST (HTTPS) | `aadserver` + `devcert`        |
+| Resource Mgr| `10007` | HTTP/REST (HTTPS) | `armserver` + `armstore`       |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `sbserver` + `sbstore`         |
 
 Blob, Queue and Table share Azurite's `UseDevelopmentStorage=true` ports
 (`10000`/`10001`/`10002`); the pub/sub services, which have no Azurite
-convention, follow on `10003`/`10004`/`10005`.
+convention, follow on `10003`/`10004`/`10005`, and the Entra ID + Resource
+Manager control plane on `10006`/`10007`. The control-plane ports serve HTTPS
+when TLS is enabled (`-tls-auto`, or `-tls-cert`/`-tls-key`), because MSAL and
+azure-core refuse to send bearer tokens over plain HTTP.
 
 `cmd/localaz` starts each HTTP service on its own `http.Server` goroutine and
 starts Service Bus on a raw `net.Listen` accept loop (AMQP is not HTTP), then
@@ -130,3 +139,20 @@ flow-controlled transfers, dispositions, and CBS auth) for the official
 `azservicebus` SDK to work unchanged when it connects with
 `UseDevelopmentEmulator=true`. Message bodies are relayed verbatim, so only the
 performative and CBS surface is decoded.
+
+## The control plane (Entra ID + Resource Manager)
+
+`aadserver` and `armserver` let the Azure CLI and SDKs treat localaz as a
+custom Azure cloud. `aadserver` publishes an OIDC discovery document and JWKS,
+and mints hand-rolled RS256 JWTs (`crypto/rsa`, no third-party dependency) that
+verify against the published keys. `armserver` serves the cloud metadata
+document (which advertises the login, resource-manager and Log Analytics
+endpoints), a single fixed subscription and tenant, and runtime resource
+groups via `armstore`. Both are in-memory and transient, like the pub/sub
+services.
+
+The flow a client follows: register localaz as a cloud whose `name` equals
+`-arm-cloud-name`, `az login` against the emulated AAD (using the ADFS
+authority so MSAL skips public instance discovery), then run data-plane
+commands — the CLI resolves their host from the ARM cloud metadata and reaches
+localaz. `devcert` generates the self-signed TLS material this requires.

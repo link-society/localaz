@@ -201,6 +201,55 @@ strings, numbers, or `true`/`false`.
   parentheses, OData/scalar functions, and timespan filtering.
 - Data-collection-rule schema/transform validation; cross-workspace queries.
 
+## Azure Entra ID + Resource Manager (control plane)
+
+Served on ports `10006` (Entra ID / AAD) and `10007` (Resource Manager / ARM),
+over HTTPS when TLS is enabled. Together they let the Azure CLI and the Azure
+SDKs treat localaz as a custom cloud: register it, `az login` with a service
+principal, and have data-plane commands routed to localaz. See
+[configuration.md](configuration.md) for the registration recipe.
+
+### Entra ID (AAD)
+
+| Operation                 | REST surface                                            |
+| ------------------------- | ------------------------------------------------------- |
+| OpenID configuration      | `GET /{tenant}/.well-known/openid-configuration` (and `/{tenant}/v2.0/...`) |
+| JWKS (signing keys)       | `GET /{tenant}/discovery/keys`                          |
+| Token                     | `POST /{tenant}/oauth2/token` (and `/{tenant}/oauth2/v2.0/token`) |
+
+- Tokens are minted as hand-rolled **RS256** JWTs and verify against the
+  published JWKS. The audience is derived from the requested scope or `resource`
+  parameter; client id, secret and assertions are accepted but not validated.
+- Refresh and id tokens are issued for non-`client_credentials` grants. Sign in
+  with `--tenant adfs` so MSAL skips public instance discovery.
+
+### Resource Manager (ARM)
+
+| Operation                 | REST surface                                            |
+| ------------------------- | ------------------------------------------------------- |
+| Cloud metadata            | `GET /metadata/endpoints`                               |
+| List tenants              | `GET /tenants`                                          |
+| List subscriptions        | `GET /subscriptions`                                    |
+| Get subscription          | `GET /subscriptions/{id}`                               |
+| List resource groups      | `GET /subscriptions/{id}/resourcegroups`                |
+| Create/replace group      | `PUT /subscriptions/{id}/resourcegroups/{name}`         |
+| Get resource group        | `GET /subscriptions/{id}/resourcegroups/{name}`         |
+| Delete resource group     | `DELETE /subscriptions/{id}/resourcegroups/{name}`      |
+
+- A single fixed subscription and tenant are configured at startup; resource
+  groups are created at runtime. State is in-memory and never persisted.
+- The `/metadata/endpoints` document advertises the login, resource-manager and
+  Log Analytics endpoints, keyed for the CLI's cloud-metadata resolution (the
+  Log Analytics host is exposed under the extension's
+  `logAnalyticslogAnalyticsResourceId` index). Its `name` field must match the
+  registered cloud name (`-arm-cloud-name`).
+
+### Not yet implemented (control plane)
+
+- Token signature/scope validation and RBAC; device-code/interactive logins.
+- Resource providers beyond resource groups (no VM/storage/etc. resources).
+- Subscription or tenant management operations.
+
 ## Roadmap
 
 - Optional Shared Key signature verification

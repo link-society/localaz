@@ -19,6 +19,8 @@ services:
       - "10003:10003"
       - "10004:10004"
       - "10005:10005"
+      - "10006:10006"
+      - "10007:10007"
       - "5672:5672"
     volumes:
       - localaz-data:/data
@@ -29,6 +31,8 @@ services:
       LOCALAZ_EVENTGRID_ADDR: ":10003"
       LOCALAZ_WEBPUBSUB_ADDR: ":10004"
       LOCALAZ_MONITOR_ADDR: ":10005"
+      LOCALAZ_AAD_ADDR: ":10006"
+      LOCALAZ_ARM_ADDR: ":10007"
       LOCALAZ_SERVICEBUS_ADDR: ":5672"
       LOCALAZ_DATA_DIR: "/data"
 

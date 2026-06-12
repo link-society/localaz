@@ -7,9 +7,12 @@ Guidance for AI agents and contributors working on localaz.
 localaz is a local **Azure emulator**: a single Go process (shipped as one
 Docker container) that speaks the native Azure service protocols so the Azure
 CLI and the official SDKs work against it unchanged. It currently emulates Blob
-Storage, Queue Storage, Table Storage, Event Grid, Web PubSub, and Service Bus,
-each on its own port but all in the one process. See
-[ARCHITECTURE.md](ARCHITECTURE.md) for the full design.
+Storage, Queue Storage, Table Storage, Event Grid, Web PubSub, Service Bus, and
+Monitor Logs, plus an Entra ID (AAD) + Resource Manager (ARM) **control plane**
+that lets the CLI/SDKs treat localaz as a custom Azure cloud (register, log in,
+and route data-plane commands to localaz). Everything runs in the one process,
+each on its own port. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full
+design.
 
 - Module path: `localaz.dev`
 - Go version: 1.26
@@ -37,6 +40,10 @@ internal/sbserver      Service Bus AMQP 1.0 (hand-rolled framing/codec)
 internal/sbstore       in-memory Service Bus broker
 internal/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
 internal/monitorstore  in-memory Monitor Logs tables
+internal/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
+internal/armserver     Resource Manager: cloud metadata, subscriptions, groups
+internal/armstore      in-memory ARM state (one subscription/tenant + groups)
+internal/devcert       self-signed TLS material for the control plane
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
 test/e2e               end-to-end tests via the Azure CLI (build tag: e2e)
@@ -54,12 +61,16 @@ docs/                  configuration, supported APIs, testing
 | Event Grid  | `10003` | HTTP/REST         | `-eventgrid-addr` / `LOCALAZ_EVENTGRID_ADDR`     |
 | Web PubSub  | `10004` | HTTP + WebSocket  | `-webpubsub-addr` / `LOCALAZ_WEBPUBSUB_ADDR`     |
 | Monitor Logs| `10005` | HTTP/REST         | `-monitor-addr` / `LOCALAZ_MONITOR_ADDR`         |
+| Entra ID    | `10006` | HTTP/REST (HTTPS) | `-aad-addr` / `LOCALAZ_AAD_ADDR`                 |
+| Resource Mgr| `10007` | HTTP/REST (HTTPS) | `-arm-addr` / `LOCALAZ_ARM_ADDR`                 |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
 The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
 tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
 `UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
-pub/sub services moved to `10003`/`10004`/`10005`.
+pub/sub services moved to `10003`/`10004`/`10005` and the control plane (AAD,
+ARM) to `10006`/`10007`. The control-plane ports serve HTTPS when TLS is
+enabled (`-tls-auto`, or `-tls-cert`/`-tls-key`).
 
 ## Conventions
 
@@ -125,7 +136,8 @@ same image.
   are decoded.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
   Monitor Logs do not persist — their traffic is transient, so there is no
-  `/data` format for them.
+  `/data` format for them. The AAD/ARM control plane is in-memory too (one
+  fixed subscription/tenant plus runtime resource groups).
 - **Monitor Logs is two data planes on one port.** Ingestion
   (`POST /dataCollectionRules/{rule}/streams/{stream}`, returns `204`) and the
   Log Analytics query (`POST /v1/workspaces/{id}/query`, returns `200`) share
@@ -154,3 +166,33 @@ same image.
   `<root>/table/tables.json`).
 - **Blob name encoding.** Blob names may contain `/`. On disk they are stored
   under a URL-safe base64 key; do not assume a 1:1 path mapping.
+
+## Control plane (AAD + ARM) gotchas
+
+- **TLS is mandatory for the control plane.** MSAL and azure-core refuse to
+  send bearer tokens over plain HTTP, so AAD/ARM/Monitor must serve HTTPS. Use
+  `-tls-auto` (writes `<data>/tls/localaz.{crt,key}`) or supply
+  `-tls-cert`/`-tls-key`. `http://` authorities are rejected outright by MSAL.
+- **Sign in with `--tenant adfs`.** The ADFS authority mode makes MSAL skip
+  public `login.microsoftonline.com` instance discovery and talk only to the
+  configured authority — essential for offline use.
+- **CLI cert trust:** set BOTH `REQUESTS_CA_BUNDLE` and `SSL_CERT_FILE` to the
+  cert. `AZURE_CLI_DISABLE_CONNECTION_VERIFICATION=1` covers MSAL but NOT the
+  secondary OIDC/metadata fetches, so the CA-bundle env vars are the reliable
+  path.
+- **Registered cloud name must equal `-arm-cloud-name`.** The CLI matches the
+  active cloud against the `name` field of the ARM `/metadata/endpoints`
+  document when resolving data-plane hosts; a mismatch yields
+  `CloudEndpointNotSetException` on `az monitor log-analytics query`.
+- **Log Analytics host discovery quirk.** The `log-analytics` extension reads
+  the query host from the metadata index `logAnalyticslogAnalyticsResourceId`
+  (doubled prefix, verbatim) only via `ARM_CLOUD_METADATA_URL`; the named
+  `log_analytics_resource_id` endpoint does NOT match. `armserver` emits that
+  exact key.
+- **JWTs are hand-rolled RS256** (crypto/rsa, no third-party dep) and verify
+  against the published JWKS; tokens, client id and secret are accepted but
+  never validated (opt-in only, like the storage Shared Key).
+- **The e2e control-plane test isolates `AZURE_CONFIG_DIR`** to a temp dir so it
+  never touches the developer's real clouds/logins, but points
+  `AZURE_EXTENSION_DIR` at the real extension dir for the `log-analytics`
+  command (skips if that extension is absent).

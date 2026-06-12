@@ -7,8 +7,10 @@ A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 It currently emulates **Blob Storage**, **Queue Storage**, **Table Storage**,
 **Event Grid** (namespace topics, pull delivery), **Web PubSub**, **Service
 Bus** (queues and topics over AMQP), and **Monitor Logs** (ingestion and
-KQL-subset queries), each on its own port but all inside the one process and
-container.
+KQL-subset queries), plus an **Entra ID (AAD) + Resource Manager (ARM) control
+plane** that lets the CLI/SDKs register localaz as a custom Azure cloud, log in,
+and route data-plane commands to it. Everything runs on its own port inside the
+one process and container.
 
 ## Quick start
 
@@ -28,6 +30,8 @@ The services are then available at:
 | Event Grid  | `http://127.0.0.1:10003`                   |
 | Web PubSub  | `http://127.0.0.1:10004`                   |
 | Monitor Logs| `http://127.0.0.1:10005`                   |
+| Entra ID    | `http://127.0.0.1:10006` (HTTPS with TLS)  |
+| Resource Mgr| `http://127.0.0.1:10007` (HTTPS with TLS)  |
 | Service Bus | `sb://127.0.0.1:5672` (AMQP)               |
 
 Generate a connection string for your shell (matches Azurite's well-known
@@ -71,6 +75,23 @@ const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAcc
 client, _ := azservicebus.NewClientFromConnectionString(connStr, nil)
 sender, _ := client.NewSender("myqueue", nil)
 sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello")}, nil)
+```
+
+### As a custom Azure cloud (Entra ID + Resource Manager)
+
+Register localaz as a cloud, sign in, and drive data-plane commands such as
+`az monitor log-analytics query` through it. The control plane needs TLS, so
+run localaz with `-tls-auto` and trust the generated cert. See
+[Configuration](docs/configuration.md#control-plane-entra-id--resource-manager)
+for the full recipe:
+
+```bash
+export REQUESTS_CA_BUNDLE=<data>/tls/localaz.crt SSL_CERT_FILE=<data>/tls/localaz.crt
+export ARM_CLOUD_METADATA_URL=https://127.0.0.1:10007/metadata/endpoints
+az cloud register -n localaz --endpoint-resource-manager https://127.0.0.1:10007/ \
+  --endpoint-active-directory https://127.0.0.1:10006/ --skip-endpoint-discovery
+az cloud set -n localaz
+az login --service-principal -u <app-id> -p <any-secret> --tenant adfs
 ```
 
 ## Common tasks
