@@ -51,10 +51,19 @@ func (s *Server) putMessage(w http.ResponseWriter, r *http.Request, req request,
 	_, _ = w.Write(out)
 }
 
+// maxNumOfMessages is Azure's upper bound for the numofmessages query
+// parameter on Get Messages; values above it are rejected.
+const maxNumOfMessages = 32
+
 func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, req request, q url) {
 	num := parseInt(q.Get("numofmessages"), 1)
 	if num < 1 {
 		num = 1
+	}
+	if num > maxNumOfMessages {
+		s.writeError(w, r, azerr.New(http.StatusBadRequest, azerr.CodeOutOfRangeQueryParam,
+			"One of the query parameters specified in the request URI is outside the permissible range."))
+		return
 	}
 
 	var (

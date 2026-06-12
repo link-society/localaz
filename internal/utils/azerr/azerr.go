@@ -25,6 +25,7 @@ const (
 	CodeOutOfRangeInput        Code = "OutOfRangeInput"
 	CodeInvalidInput           Code = "InvalidInput"
 	CodeInvalidQueryParameter  Code = "InvalidQueryParameterValue"
+	CodeOutOfRangeQueryParam   Code = "OutOfRangeQueryParameterValue"
 	CodeUnsupportedHeader      Code = "UnsupportedHeader"
 	CodeMissingRequiredHeader  Code = "MissingRequiredHeader"
 	CodeInvalidBlockList       Code = "InvalidBlockList"
