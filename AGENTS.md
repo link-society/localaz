@@ -168,6 +168,12 @@ same image.
   (a leading `Custom-` is stripped). Both SDKs send bearer tokens, which azcore
   refuses over plain HTTP, so the SDK tests use a TLS `httptest` server + a fake
   `TokenCredential`.
+- **Monitor ingestion bodies are size-bounded.** Both the raw upload and the
+  gunzipped stream are capped (`maxIngestBytes` = 64 MiB raw via
+  `http.MaxBytesReader`, `maxDecompressedBytes` = 256 MiB after inflation via an
+  `io.LimitReader`) so an oversized POST or a gzip bomb cannot expand unbounded
+  in memory. An over-limit body answers `413 Request Entity Too Large`. The caps
+  are package `var`s only so tests can lower them.
 - **Monitor query is a documented KQL subset.** Only
   `where`/`project`/`sort by`/`take`(`limit`)/`count` over string/number/bool
   literals with `==`/`!=`/`<`/`<=`/`>`/`>=` and `and`/`or` are supported — no

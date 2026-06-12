@@ -4,12 +4,28 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
 	"localaz.dev/internal/stores/monitorstore"
 	"localaz.dev/internal/utils/httpx"
 )
+
+// Ingestion body size caps. They guard against unbounded memory growth from a
+// large upload or a gzip bomb (a tiny Content-Encoding: gzip body that inflates
+// to gigabytes). maxIngestBytes bounds the raw request body via
+// http.MaxBytesReader; maxDecompressedBytes bounds the inflated stream via an
+// io.LimitReader. They are vars rather than consts only so tests can lower
+// them; production code never reassigns them.
+var (
+	maxIngestBytes       int64 = 64 << 20  // 64 MiB raw upload.
+	maxDecompressedBytes int64 = 256 << 20 // 256 MiB after gzip inflation.
+)
+
+// errBodyTooLarge signals that the request body (raw or decompressed) exceeded
+// its size cap, so handleIngest can answer 413 rather than 400.
+var errBodyTooLarge = errors.New("request body exceeds size limit")
 
 // handleIngest implements the Logs Ingestion API:
 //
@@ -24,8 +40,12 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request, stream str
 		return
 	}
 
-	body, err := readBody(r)
+	body, err := readBody(w, r)
 	if err != nil {
+		if errors.Is(err, errBodyTooLarge) {
+			httpx.WriteError(w, http.StatusRequestEntityTooLarge, "RequestEntityTooLarge", "Request body exceeds the maximum allowed size.")
+			return
+		}
 		httpx.WriteError(w, http.StatusBadRequest, "BadRequest", "Could not read request body.")
 		return
 	}
@@ -41,10 +61,18 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request, stream str
 }
 
 // readBody reads the request body, transparently decompressing it when the
-// client set Content-Encoding: gzip.
-func readBody(r *http.Request) ([]byte, error) {
+// client set Content-Encoding: gzip. Both the raw upload and the decompressed
+// stream are size-bounded (see maxIngestBytes / maxDecompressedBytes) so an
+// oversized body or a gzip bomb cannot expand unbounded in memory. An
+// over-limit body returns errBodyTooLarge.
+func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxIngestBytes)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			return nil, errBodyTooLarge
+		}
 		return nil, err
 	}
 	if r.Header.Get("Content-Encoding") != "gzip" {
@@ -55,5 +83,13 @@ func readBody(r *http.Request) ([]byte, error) {
 		return nil, err
 	}
 	defer zr.Close()
-	return io.ReadAll(zr)
+	// Read one byte past the cap so we can detect an over-limit inflation.
+	decompressed, err := io.ReadAll(io.LimitReader(zr, maxDecompressedBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(decompressed)) > maxDecompressedBytes {
+		return nil, errBodyTooLarge
+	}
+	return decompressed, nil
 }
