@@ -72,7 +72,7 @@ func (s *Store) loadContainer(acct, name string) (*container, error) {
 		if err := json.Unmarshal(raw, &info); err != nil {
 			return nil, err
 		}
-		c.blobs[info.Name] = &blobEntry{info: info, blocks: map[string][]byte{}}
+		c.blobs[info.Name] = &blobEntry{info: info}
 	}
 	return c, nil
 }
@@ -89,17 +89,11 @@ func (s *Store) persistContainer(acct string, c *container) error {
 	return os.WriteFile(filepath.Join(dir, containerMetaFile), raw, 0o644)
 }
 
-func (s *Store) persistBlob(acct, cname string, b *blobEntry, data []byte) error {
-	cdir := s.containerDir(acct, cname)
-	for _, d := range []string{dataDir, metaDir} {
-		if err := os.MkdirAll(filepath.Join(cdir, d), 0o755); err != nil {
-			return err
-		}
-	}
-	if data != nil {
-		if err := os.WriteFile(s.blobDataPath(acct, cname, b.info.Name), data, 0o644); err != nil {
-			return err
-		}
+// persistBlobMeta writes a blob's metadata JSON to disk. The data file itself
+// is written separately by the streaming write path.
+func (s *Store) persistBlobMeta(acct, cname string, b *blobEntry) error {
+	if err := os.MkdirAll(filepath.Join(s.containerDir(acct, cname), metaDir), 0o755); err != nil {
+		return err
 	}
 	raw, err := json.MarshalIndent(b.info, "", "  ")
 	if err != nil {

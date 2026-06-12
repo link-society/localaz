@@ -6,6 +6,7 @@ package blobstore
 
 import (
 	"errors"
+	"io"
 	"time"
 )
 
@@ -58,16 +59,21 @@ type Store interface {
 	GetContainer(account, container string) (ContainerInfo, error)
 	ListContainers(account, prefix string) ([]ContainerInfo, error)
 
-	// Blobs.
-	PutBlob(account, container, name string, data []byte, props BlobProps) (BlobInfo, error)
-	GetBlob(account, container, name string) ([]byte, BlobInfo, error)
+	// Blobs. The blob data path streams to and from disk so that large or
+	// concurrent blobs do not buffer their payload in memory.
+	//
+	// PutBlob streams data to disk while computing its MD5 and byte count; the
+	// returned BlobInfo carries ContentLength (bytes copied) and Props.ContentMD5.
+	PutBlob(account, container, name string, data io.Reader, props BlobProps) (BlobInfo, error)
+	// GetBlob returns a reader over the blob payload; the caller must Close it.
+	GetBlob(account, container, name string) (io.ReadCloser, BlobInfo, error)
 	StatBlob(account, container, name string) (BlobInfo, error)
 	DeleteBlob(account, container, name string) error
 	// ListBlobs returns the blobs (optionally filtered by prefix) and, when a
 	// delimiter is supplied, the set of virtual directory prefixes.
 	ListBlobs(account, container, prefix, delimiter string) (blobs []BlobInfo, prefixes []string, err error)
 
-	// Block blob staging.
-	StageBlock(account, container, name, blockID string, data []byte) error
+	// Block blob staging. Staged blocks stream to per-block files on disk.
+	StageBlock(account, container, name, blockID string, data io.Reader) error
 	CommitBlockList(account, container, name string, blockIDs []string, props BlobProps) (BlobInfo, error)
 }

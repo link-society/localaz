@@ -175,12 +175,27 @@ same image.
   (uid 65532). The Dockerfile creates `/data` in the build stage and copies it
   with `--chown=65532:65532` so the non-root user can write to it.
 - **Persistence (Blob/Queue/Table).** State lives under `/data`; mount a volume
-  to keep it across restarts. `fsstore` rebuilds its in-memory blob index from
-  disk on startup; `queuestore` and `tablestore` each load and atomically
-  rewrite a single JSON document (`<root>/queue/queues.json`,
+  to keep it across restarts. `fsstore` keeps only blob *metadata* in memory and
+  rebuilds that index from disk on startup; `queuestore` and `tablestore` each
+  load and atomically rewrite a single JSON document (`<root>/queue/queues.json`,
   `<root>/table/tables.json`).
+- **Blob data is streamed, never buffered.** The `blobstore.Store` interface
+  uses `io.Reader`/`io.ReadCloser` for blob bodies, not `[]byte`, so large or
+  concurrent blobs do not OOM the server. `PutBlob` streams the request body to
+  a temp file (computing MD5 + byte count via `io.MultiWriter`) then renames it
+  into place; `GetBlob` opens the data file and returns it as an `io.ReadCloser`
+  the caller (`blobserver`) `io.Copy`s to the response and then closes.
+  `StageBlock` writes each staged block to its own file under
+  `<container>/blocks/<key>/<blockID-key>` (no in-memory block map);
+  `CommitBlockList` assembles the blob by `io.Copy`-ing those block files in
+  order into a temp file then renaming — it never concatenates in memory. The
+  single-shot Put Blob path records the payload MD5 so Get/Head echo it; the
+  Put Block List path does not set one (unchanged wire behavior). The
+  `io.LimitReader(r.Body, 5 GiB)` cap is kept as defense-in-depth around the
+  reader handed to the store.
 - **Blob name encoding.** Blob names may contain `/`. On disk they are stored
-  under a URL-safe base64 key; do not assume a 1:1 path mapping.
+  under a URL-safe base64 key; do not assume a 1:1 path mapping. Staged block
+  ids are encoded the same way.
 
 ## Control plane (AAD + ARM) gotchas
 

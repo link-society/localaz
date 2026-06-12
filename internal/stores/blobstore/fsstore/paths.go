@@ -23,3 +23,14 @@ func (s *Store) blobDataPath(acct, c, name string) string {
 func (s *Store) blobMetaPath(acct, c, name string) string {
 	return filepath.Join(s.containerDir(acct, c), metaDir, key(name)+".json")
 }
+
+// blockDir is the per-blob staging directory holding uncommitted blocks.
+func (s *Store) blockDir(acct, c, name string) string {
+	return filepath.Join(s.containerDir(acct, c), blocksDir, key(name))
+}
+
+// blockPath is the on-disk file for a single staged block. The block id is
+// encoded so arbitrary client-supplied ids map to safe filenames.
+func (s *Store) blockPath(acct, c, name, blockID string) string {
+	return filepath.Join(s.blockDir(acct, c, name), key(blockID))
+}
