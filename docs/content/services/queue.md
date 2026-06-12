@@ -61,7 +61,7 @@ queue.DeleteMessage(ctx, *msg.MessageID, *msg.PopReceipt, nil)
 ## Example: Azure CLI
 
 ```bash
-eval "$(task env:conn-string)"
+# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
 
 az storage queue create --name work-items
 az storage message put --queue-name work-items --content "hello"

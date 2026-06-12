@@ -16,6 +16,17 @@ one process and container.
 
 ## Quick start
 
+The published image is on Docker Hub at
+[`linksociety/localaz`](https://hub.docker.com/r/linksociety/localaz) (built for
+`linux/amd64` and `linux/arm64`):
+
+```bash
+docker pull linksociety/localaz
+```
+
+Or run the development Compose stack, which builds from source and exposes every
+service port:
+
 ```bash
 task docker:up
 # or, without Task:

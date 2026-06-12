@@ -11,9 +11,6 @@ version: "3"
 
 vars:
   ACCOUNT: devstoreaccount1
-  # Azurite's well-known development account key. The emulator does not verify
-  # the Shared Key signature, but the CLI/SDK require a syntactically valid key.
-  KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
   HOST: 127.0.0.1
   PORT: "10000"
   QUEUE_PORT: "10001"
@@ -102,7 +99,7 @@ tasks:
     desc: Print the AZURE_STORAGE_CONNECTION_STRING export line (use with eval)
     silent: true
     cmds:
-      - echo 'export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName={{.ACCOUNT}};AccountKey={{.KEY}};BlobEndpoint=http://{{.HOST}}:{{.PORT}}/{{.ACCOUNT}};QueueEndpoint=http://{{.HOST}}:{{.QUEUE_PORT}}/{{.ACCOUNT}};TableEndpoint=http://{{.HOST}}:{{.TABLE_PORT}}/{{.ACCOUNT}};"'
+      - echo 'export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"'
 
   clean:
     desc: Remove build artifacts and local state

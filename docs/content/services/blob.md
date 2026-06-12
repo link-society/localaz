@@ -65,7 +65,7 @@ fmt.Println(string(data))
 ## Example: Azure CLI
 
 ```bash
-eval "$(task env:conn-string)"   # exports AZURE_STORAGE_CONNECTION_STRING
+# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
 
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt

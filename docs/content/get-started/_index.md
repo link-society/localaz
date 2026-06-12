@@ -1,64 +1,42 @@
 ---
 title: "Get Started"
-description: "Build and run the localaz Docker image."
+description: "Run the localaz Docker image and connect a client."
 weight: 2
 ---
 
-This page walks through building the localaz container image and running it so
-the Azure CLI and SDKs can talk to it.
+This page walks through running the localaz container and pointing the Azure CLI
+and SDKs at it.
 
 ## Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) (with Compose).
-- Optionally [Task](https://taskfile.dev) for the convenience commands below.
+- [Docker](https://docs.docker.com/get-docker/).
 - The [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli)
   (`az`) and/or an Azure SDK, if you want to drive the emulator.
 
-## Build the image
-
-With Task:
-
-```bash
-task docker:build
-```
-
-Or directly with Docker:
-
-```bash
-docker build -f docker/localaz.dockerfile -t localaz:dev .
-```
-
-The image is built in two stages: a `golang:1.26-alpine` build stage compiles a
-static binary, and the runtime stage is a distroless `nonroot` image. State
-lives in `/data`, owned by the non-root user (uid 65532).
-
 ## Run the container
 
-The simplest path is the development Compose stack, which exposes every service
-port and mounts a named volume for persistence:
+Pull and run the published image from Docker Hub
+([`linksociety/localaz`](https://hub.docker.com/r/linksociety/localaz)),
+publishing each service port and mounting a volume for persistence:
 
 ```bash
-task docker:up
-# or, without Task:
-docker compose -f docker/docker-compose.dev.yml up --build
-```
-
-To run the image by hand, publish each service port and mount a volume:
-
-```bash
-docker run \
+docker run --name localaz \
   -p 10000:10000 -p 10001:10001 -p 10002:10002 \
   -p 10003:10003 -p 10004:10004 -p 10005:10005 \
   -p 10006:10006 -p 10007:10007 -p 5672:5672 \
-  -v localaz-data:/data localaz:dev
+  -v localaz-data:/data \
+  linksociety/localaz:latest
 ```
 
-Stop the Compose stack with:
+The image is published for both `linux/amd64` and `linux/arm64` (the latter
+covers Apple Silicon / macOS arm64 hosts). State lives in `/data`, owned by the
+non-root user (uid 65532); the named `localaz-data` volume keeps it across
+restarts.
+
+Stop and remove the container with:
 
 ```bash
-task docker:down
-# or
-docker compose -f docker/docker-compose.dev.yml down
+docker rm -f localaz
 ```
 
 ## Service endpoints
@@ -80,21 +58,16 @@ Once running, the services are available at:
 ## Connect a client
 
 The credentials match Azurite's well-known development account, so existing
-tooling works unchanged:
-
-| Setting | Value |
-| ------- | ----- |
-| Account name | `devstoreaccount1` |
-| Account key | Azurite's well-known development key |
-
-Generate a ready-to-use connection string for your shell:
+tooling works unchanged. Because localaz uses Azurite's default storage ports,
+the SDKs and CLI can connect with the `UseDevelopmentStorage=true` shorthand —
+no account name or key to write down or paste anywhere:
 
 ```bash
-eval "$(task env:conn-string)"
+export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 ```
 
-This exports `AZURE_STORAGE_CONNECTION_STRING`, which both the Azure CLI and the
-SDKs pick up automatically. A quick smoke test with the CLI:
+Both the Azure CLI and the SDKs pick up `AZURE_STORAGE_CONNECTION_STRING`
+automatically. A quick smoke test with the CLI:
 
 ```bash
 az storage container create --name demo
@@ -103,18 +76,8 @@ az storage blob list --container-name demo -o table
 ```
 
 > The emulator accepts the Shared Key `Authorization` header (and Service Bus
-> CBS tokens) but does **not** verify them, so the exact key value is not
-> sensitive in this context.
-
-## Running locally without Docker
-
-For development you can run the binary directly:
-
-```bash
-task build && task run
-# or
-go run ./cmd/localaz -addr :10000 -data ./data
-```
+> CBS tokens) but does **not** verify them.
 
 See [Services](../services/) for per-service configuration flags, environment
 variables, and SDK/CLI examples.
+

@@ -37,8 +37,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/localaz:${{ github.ref_name }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/localaz:latest
+            linksociety/localaz:${{ github.ref_name }}
+            linksociety/localaz:latest
 
       # A GitHub App token (read/write) is used for the release API call to
       # avoid the low rate limits of the default GITHUB_TOKEN.

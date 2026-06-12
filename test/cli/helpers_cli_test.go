@@ -4,7 +4,9 @@ package cli
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/http"
@@ -16,11 +18,21 @@ import (
 	"time"
 )
 
-const (
-	account = "devstoreaccount1"
-	// Azurite's well-known development account key.
-	accountKey = "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
-)
+const account = "devstoreaccount1"
+
+// accountKey is a random, syntactically valid Shared Key generated fresh for
+// each run. localaz does not verify the Shared Key signature, so the value is
+// irrelevant beyond being valid base64 — we deliberately never hardcode a real
+// or well-known key.
+var accountKey = randomAccountKey()
+
+func randomAccountKey() string {
+	b := make([]byte, 64)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
 
 // blobEndpoint, queueEndpoint and tableEndpoint are the storage endpoints under
 // test, resolved by TestMain.

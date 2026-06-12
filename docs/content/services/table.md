@@ -71,7 +71,7 @@ pager := table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
 ## Example: Azure CLI
 
 ```bash
-eval "$(task env:conn-string)"
+# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
 
 az storage table create --name people
 az storage entity insert --table-name people \
