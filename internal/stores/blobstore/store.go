@@ -57,7 +57,12 @@ type Store interface {
 	CreateContainer(account, container string, metadata map[string]string) (ContainerInfo, error)
 	DeleteContainer(account, container string) error
 	GetContainer(account, container string) (ContainerInfo, error)
-	ListContainers(account, prefix string) ([]ContainerInfo, error)
+	// ListContainers returns the containers (optionally filtered by prefix) in
+	// lexicographic order, paginated. marker is an opaque continuation token from
+	// a previous call (empty starts from the beginning); maxResults caps the page
+	// size. When more containers remain, nextMarker is the token for the next
+	// page, otherwise it is empty.
+	ListContainers(account, prefix string, maxResults int, marker string) (containers []ContainerInfo, nextMarker string, err error)
 
 	// Blobs. The blob data path streams to and from disk so that large or
 	// concurrent blobs do not buffer their payload in memory.
