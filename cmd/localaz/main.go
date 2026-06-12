@@ -20,6 +20,8 @@ import (
 	"localaz.dev/internal/blobstore/fsstore"
 	"localaz.dev/internal/egserver"
 	"localaz.dev/internal/egstore"
+	"localaz.dev/internal/monitorserver"
+	"localaz.dev/internal/monitorstore"
 	"localaz.dev/internal/queueserver"
 	"localaz.dev/internal/queuestore"
 	"localaz.dev/internal/sbserver"
@@ -35,6 +37,7 @@ func main() {
 	tableAddr := flag.String("table-addr", envOr("LOCALAZ_TABLE_ADDR", ":10002"), "table service listen address")
 	eventGridAddr := flag.String("eventgrid-addr", envOr("LOCALAZ_EVENTGRID_ADDR", ":10003"), "event grid service listen address")
 	webPubSubAddr := flag.String("webpubsub-addr", envOr("LOCALAZ_WEBPUBSUB_ADDR", ":10004"), "web pubsub service listen address")
+	monitorAddr := flag.String("monitor-addr", envOr("LOCALAZ_MONITOR_ADDR", ":10005"), "monitor logs service listen address")
 	serviceBusAddr := flag.String("servicebus-addr", envOr("LOCALAZ_SERVICEBUS_ADDR", ":5672"), "service bus AMQP listen address")
 	dataDir := flag.String("data", envOr("LOCALAZ_DATA_DIR", "/data"), "directory for persisted state")
 	flag.Parse()
@@ -66,6 +69,7 @@ func main() {
 		{name: "table", addr: *tableAddr, handler: tableserver.New(tableStore)},
 		{name: "eventgrid", addr: *eventGridAddr, handler: egserver.New(egstore.New())},
 		{name: "webpubsub", addr: *webPubSubAddr, handler: wpsserver.New()},
+		{name: "monitor", addr: *monitorAddr, handler: monitorserver.New(monitorstore.New())},
 	}
 
 	amqp := amqpService{addr: *serviceBusAddr, server: sbserver.New(sbstore.New())}

@@ -35,6 +35,8 @@ internal/egstore       in-memory Event Grid pub/sub state
 internal/wpsserver     Web PubSub (REST + WebSocket)
 internal/sbserver      Service Bus AMQP 1.0 (hand-rolled framing/codec)
 internal/sbstore       in-memory Service Bus broker
+internal/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
+internal/monitorstore  in-memory Monitor Logs tables
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
 test/e2e               end-to-end tests via the Azure CLI (build tag: e2e)
@@ -51,12 +53,13 @@ docs/                  configuration, supported APIs, testing
 | Table       | `10002` | HTTP/REST (OData) | `-table-addr` / `LOCALAZ_TABLE_ADDR`             |
 | Event Grid  | `10003` | HTTP/REST         | `-eventgrid-addr` / `LOCALAZ_EVENTGRID_ADDR`     |
 | Web PubSub  | `10004` | HTTP + WebSocket  | `-webpubsub-addr` / `LOCALAZ_WEBPUBSUB_ADDR`     |
+| Monitor Logs| `10005` | HTTP/REST         | `-monitor-addr` / `LOCALAZ_MONITOR_ADDR`         |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
 The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
 tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
 `UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
-pub/sub services moved to `10003`/`10004`.
+pub/sub services moved to `10003`/`10004`/`10005`.
 
 ## Conventions
 
@@ -120,8 +123,20 @@ same image.
   `(channel, handle)`, not handle alone (the `$cbs`/`$management` links collide
   otherwise). Message bodies are relayed verbatim; only performatives and CBS
   are decoded.
-- **Pub/sub state is in-memory.** Event Grid, Web PubSub, and Service Bus do not
-  persist — their traffic is transient, so there is no `/data` format for them.
+- **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
+  Monitor Logs do not persist — their traffic is transient, so there is no
+  `/data` format for them.
+- **Monitor Logs is two data planes on one port.** Ingestion
+  (`POST /dataCollectionRules/{rule}/streams/{stream}`, returns `204`) and the
+  Log Analytics query (`POST /v1/workspaces/{id}/query`, returns `200`) share
+  port `10005`, routed by path prefix. The stream name is the destination table
+  (a leading `Custom-` is stripped). Both SDKs send bearer tokens, which azcore
+  refuses over plain HTTP, so the SDK tests use a TLS `httptest` server + a fake
+  `TokenCredential`.
+- **Monitor query is a documented KQL subset.** Only
+  `where`/`project`/`sort by`/`take`(`limit`)/`count` over string/number/bool
+  literals with `==`/`!=`/`<`/`<=`/`>`/`>=` and `and`/`or` are supported — no
+  `summarize`, `join`, functions, parentheses, or timespan filtering.
 - **Table merge arrives as HTTP `PATCH`.** The `aztables` SDK issues `PATCH`
   (not the `MERGE` verb) for merge updates; `internal/tableserver` accepts both.
   Upsert is a `PUT`/`PATCH` with no `If-Match`; `If-Match: *` requires the

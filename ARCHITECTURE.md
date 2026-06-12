@@ -22,6 +22,8 @@ internal/egstore       in-memory Event Grid pub/sub state
 internal/wpsserver     Web PubSub (REST + WebSocket json.webpubsub.azure.v1)
 internal/sbserver      Service Bus AMQP 1.0 protocol (hand-rolled framing/codec)
 internal/sbstore       in-memory Service Bus broker (queues + topic fan-out)
+internal/monitorserver Monitor Logs REST protocol (ingestion + KQL-subset query)
+internal/monitorstore  in-memory Monitor Logs tables
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
 test/e2e               end-to-end tests via the Azure CLI
@@ -38,11 +40,12 @@ docs/                  configuration, supported APIs, testing
 | Table       | `10002` | HTTP/REST (OData) | `tableserver` + `tablestore`   |
 | Event Grid  | `10003` | HTTP/REST         | `egserver` + `egstore`         |
 | Web PubSub  | `10004` | HTTP + WebSocket  | `wpsserver`                    |
+| Monitor Logs| `10005` | HTTP/REST         | `monitorserver` + `monitorstore` |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `sbserver` + `sbstore`         |
 
 Blob, Queue and Table share Azurite's `UseDevelopmentStorage=true` ports
 (`10000`/`10001`/`10002`); the pub/sub services, which have no Azurite
-convention, follow on `10003`/`10004`.
+convention, follow on `10003`/`10004`/`10005`.
 
 `cmd/localaz` starts each HTTP service on its own `http.Server` goroutine and
 starts Service Bus on a raw `net.Listen` accept loop (AMQP is not HTTP), then
@@ -118,8 +121,9 @@ A new service follows the same pattern Queue and Table did:
 
 ## The pub/sub services
 
-Event Grid, Web PubSub, and Service Bus keep their state in memory — pub/sub
-traffic is transient, so there is no disk format to preserve. Service Bus is the
+Event Grid, Web PubSub, Service Bus, and Monitor Logs keep their state in
+memory — pub/sub and log-ingestion traffic is transient, so there is no disk
+format to preserve. Service Bus is the
 one service that does not speak HTTP: `internal/sbserver` implements just enough
 of AMQP 1.0 (protocol headers, SASL ANONYMOUS, the open/begin/attach handshake,
 flow-controlled transfers, dispositions, and CBS auth) for the official

@@ -5,9 +5,10 @@ A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 **Azure SDK** at it — no code changes required.
 
 It currently emulates **Blob Storage**, **Queue Storage**, **Table Storage**,
-**Event Grid** (namespace topics, pull delivery), **Web PubSub**, and **Service
-Bus** (queues and topics over AMQP), each on its own port but all inside the one
-process and container.
+**Event Grid** (namespace topics, pull delivery), **Web PubSub**, **Service
+Bus** (queues and topics over AMQP), and **Monitor Logs** (ingestion and
+KQL-subset queries), each on its own port but all inside the one process and
+container.
 
 ## Quick start
 
@@ -26,6 +27,7 @@ The services are then available at:
 | Table       | `http://127.0.0.1:10002/devstoreaccount1`  |
 | Event Grid  | `http://127.0.0.1:10003`                   |
 | Web PubSub  | `http://127.0.0.1:10004`                   |
+| Monitor Logs| `http://127.0.0.1:10005`                   |
 | Service Bus | `sb://127.0.0.1:5672` (AMQP)               |
 
 Generate a connection string for your shell (matches Azurite's well-known

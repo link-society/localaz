@@ -6,7 +6,8 @@ localaz has two complementary suites.
 
 Driven by the official **Azure Go SDKs** — `azblob` for Blob, `azqueue` for
 Queue, `aztables` for Table, `aznamespaces` for Event Grid, `azwebpubsub` for
-Web PubSub, and `azservicebus` for Service Bus. Each test starts an in-process
+Web PubSub, `azservicebus` for Service Bus, and the `monitor/ingestion/azlogs` /
+`monitor/query/azlogs` clients for Monitor Logs. Each test starts an in-process
 emulator and exercises it through the same client code a real Go application
 would use. This is fast, hermetic, and needs no Docker or external tools.
 
@@ -68,10 +69,19 @@ be redirected to a local endpoint, and skips the rest:
   commands, but they resolve the target endpoint from ARM via `-n`/`-g`; there
   is no `--connection-string` or `--endpoint` override to redirect them to
   `127.0.0.1`.
+- **Monitor Logs** — the CLI cannot drive either data plane of this service.
+  There is **no log-ingestion command** at all (`az monitor data-collection`
+  only manages DCR/DCE resources on the ARM management plane). The one
+  data-plane command, `az monitor log-analytics query`, has no `--endpoint`
+  override: it resolves its host from the active cloud's ARM metadata, requires
+  an AAD bearer token (`az login`), and azure-core refuses to send that token
+  over plain HTTP. Redirecting it to `127.0.0.1` would mean standing up a fake
+  AAD + ARM + TLS control plane in the harness, which is out of scope.
 
-For the pub/sub services the **SDK suite** above is the equivalent end-to-end
-signal: it drives the official clients against localaz over the real protocol,
-which the CLI is simply unable to do locally. When launched by the suite, the
+For the pub/sub and Monitor Logs services the **SDK suite** above is the
+equivalent end-to-end signal: it drives the official clients against localaz
+over the real protocol, which the CLI is simply unable to do locally. When
+launched by the suite, the
 connection string includes the Blob, Queue and Table endpoints; in
 `LOCALAZ_E2E_ENDPOINT` mode the queue and table tests additionally read
 `LOCALAZ_E2E_QUEUE_ENDPOINT` and `LOCALAZ_E2E_TABLE_ENDPOINT` (skipping if

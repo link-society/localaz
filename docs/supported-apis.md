@@ -162,6 +162,45 @@ ANONYMOUS, CBS tokens accepted without verification).
 - Dead-letter queues, scheduled/deferred messages, sessions.
 - Message lock renewal and management operations beyond send/receive/settle.
 
+## Azure Monitor Logs
+
+Served on port `10005`, compatible with the `monitor/ingestion/azlogs`
+(Logs Ingestion) and `monitor/query/azlogs` (Log Analytics query) SDKs.
+
+| Operation        | REST surface                                                         |
+| ---------------- | -------------------------------------------------------------------- |
+| Upload logs      | `POST /dataCollectionRules/{ruleId}/streams/{stream}` (api-version `2023-01-01`) |
+| Query workspace  | `POST /v1/workspaces/{workspaceId}/query`                            |
+
+- Ingestion accepts a JSON array of records (optionally gzip-encoded) and
+  returns `204 No Content`. The data-collection rule id is accepted but not
+  validated; the stream name selects the destination table, with a leading
+  `Custom-` prefix stripped (`Custom-AppLogs_CL` → table `AppLogs_CL`). A
+  synthetic `TimeGenerated` column is added when a record omits one.
+- Queries run a documented **KQL subset** and return a single `PrimaryResult`
+  table with inferred column types. State is in-memory (logs are transient and
+  never persisted).
+
+The supported KQL grammar is:
+
+```
+TableName
+| where <col> <op> <literal> [and|or <col> <op> <literal> ...]
+| project <col> [, <col> ...]
+| sort by <col> [asc|desc]      (also spelled "order by")
+| take <n>                      (also spelled "limit")
+| count
+```
+
+where `<op>` is one of `==` `!=` `<` `<=` `>` `>=` and literals are quoted
+strings, numbers, or `true`/`false`.
+
+### Not yet implemented (Monitor Logs)
+
+- The full KQL language: `summarize`, `join`, `extend`, `distinct`,
+  parentheses, OData/scalar functions, and timespan filtering.
+- Data-collection-rule schema/transform validation; cross-workspace queries.
+
 ## Roadmap
 
 - Optional Shared Key signature verification
