@@ -1,9 +1,8 @@
 name: build
 
-# Build and test on every push, including pushes to pull request branches.
+# Build and test on every push to any branch.
 on:
   push:
-  pull_request:
 
 permissions:
   contents: read
