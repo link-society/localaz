@@ -69,9 +69,14 @@ type Store interface {
 	GetBlob(account, container, name string) (io.ReadCloser, BlobInfo, error)
 	StatBlob(account, container, name string) (BlobInfo, error)
 	DeleteBlob(account, container, name string) error
-	// ListBlobs returns the blobs (optionally filtered by prefix) and, when a
-	// delimiter is supplied, the set of virtual directory prefixes.
-	ListBlobs(account, container, prefix, delimiter string) (blobs []BlobInfo, prefixes []string, err error)
+	// ListBlobs returns one page of blobs (optionally filtered by prefix) and,
+	// when a delimiter is supplied, the set of virtual directory prefixes. Results
+	// are returned in lexicographic name order. maxResults caps the page size
+	// (clamped to 1..5000; <=0 means 5000) and marker is an opaque continuation
+	// token from a previous call (empty starts at the beginning). When more
+	// results remain, nextMarker is the token to fetch the next page; otherwise it
+	// is empty.
+	ListBlobs(account, container, prefix, delimiter string, maxResults int, marker string) (blobs []BlobInfo, prefixes []string, nextMarker string, err error)
 
 	// Block blob staging. Staged blocks stream to per-block files on disk.
 	StageBlock(account, container, name, blockID string, data io.Reader) error

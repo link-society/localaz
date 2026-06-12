@@ -2,6 +2,7 @@ package blobserver
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"localaz.dev/internal/utils/azerr"
@@ -84,11 +85,15 @@ func (s *Server) listContainers(w http.ResponseWriter, r *http.Request, req requ
 func (s *Server) listBlobs(w http.ResponseWriter, r *http.Request, req request, q queryValues) {
 	prefix := q.Get("prefix")
 	delimiter := q.Get("delimiter")
-	blobs, prefixes, err := s.store.ListBlobs(req.account, req.container, prefix, delimiter)
+	marker := q.Get("marker")
+	// An absent or non-numeric maxresults is treated as unset (the store clamps
+	// it to Azure's default/cap of 5000).
+	maxResults, _ := strconv.Atoi(q.Get("maxresults"))
+	blobs, prefixes, nextMarker, err := s.store.ListBlobs(req.account, req.container, prefix, delimiter, maxResults, marker)
 	if s.mapStoreErr(w, r, err) {
 		return
 	}
-	body, err := marshalBlobs(s.serviceEndpoint(r, req.account), req.container, prefix, delimiter, blobs, prefixes)
+	body, err := marshalBlobs(s.serviceEndpoint(r, req.account), req.container, prefix, delimiter, marker, maxResults, blobs, prefixes, nextMarker)
 	if err != nil {
 		s.writeError(w, r, azerr.Internal(err.Error()))
 		return

@@ -3,6 +3,7 @@ package fsstore
 import (
 	"bytes"
 	"crypto/md5"
+	"fmt"
 	"io"
 	"testing"
 
@@ -54,5 +55,62 @@ func TestPutGetBlobLargeRoundTrip(t *testing.T) {
 	}
 	if getInfo.ContentLength != int64(len(payload)) {
 		t.Fatalf("get content length: got %d want %d", getInfo.ContentLength, len(payload))
+	}
+}
+
+// TestListBlobsPagination walks a container in maxResults-sized pages using the
+// returned nextMarker as an opaque continuation token, and asserts the union of
+// the pages equals the full set exactly once, in lexicographic order. This
+// guards the pagination fix: with the pre-fix code (which ignored maxResults and
+// returned everything with an empty nextMarker) the first page would carry all
+// five blobs and the overlap/order assertions below would fail.
+func TestListBlobsPagination(t *testing.T) {
+	s, err := New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	const acct, cname = "devstoreaccount1", "data"
+	if _, err := s.CreateContainer(acct, cname, nil); err != nil {
+		t.Fatalf("create container: %v", err)
+	}
+
+	// Insert out of order to prove the store returns lexicographic order.
+	all := []string{"e.txt", "b.txt", "d.txt", "a.txt", "c.txt"}
+	for _, name := range all {
+		if _, err := s.PutBlob(acct, cname, name, bytes.NewReader([]byte(name)), blobstore.BlobProps{}); err != nil {
+			t.Fatalf("put %s: %v", name, err)
+		}
+	}
+	want := []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"}
+
+	var got []string
+	marker := ""
+	pages := 0
+	for {
+		blobs, _, next, err := s.ListBlobs(acct, cname, "", "", 2, marker)
+		if err != nil {
+			t.Fatalf("list blobs (marker %q): %v", marker, err)
+		}
+		pages++
+		if pages > len(all)+1 {
+			t.Fatalf("pagination did not terminate: too many pages")
+		}
+		if len(blobs) > 2 {
+			t.Fatalf("page returned %d blobs, want <= maxResults 2", len(blobs))
+		}
+		for _, b := range blobs {
+			got = append(got, b.Name)
+		}
+		if next == "" {
+			break
+		}
+		marker = next
+	}
+
+	if pages < 2 {
+		t.Fatalf("expected multiple pages, got %d", pages)
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("paginated union mismatch: got %v want %v", got, want)
 	}
 }
