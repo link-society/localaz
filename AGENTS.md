@@ -204,13 +204,20 @@ same image.
   entity to exist, and a weak ETag enforces optimistic concurrency.
 - **Table `$filter` is a documented subset.** Only `eq`/`ne`/`gt`/`ge`/`lt`/`le`
   over string/number/bool literals combined with `and`/`or` and parentheses are
-  supported — no OData functions, typed literals, or continuation tokens. The
-  recursive-descent parser caps parenthesis nesting at `maxFilterDepth` (64) so
-  attacker-supplied deeply nested `(` cannot overflow the goroutine stack; input
-  past the limit returns `errFilter`. The `$filter` and KQL parsers now have
-  direct in-package unit tests (`internal/servers/tableserver/filter_*_test.go`
-  and `internal/servers/monitorserver/{kql,predicate}_test.go`), driven through
-  their public entry points (`parseFilter`, `evalKQL`).
+  supported — no OData functions, typed literals, or continuation tokens. A
+  comparison against an absent property, or a cross-type comparison (the value's
+  type is not comparable to the literal's type), evaluates to false for *all*
+  operators including `ne`: a `$filter` selects only entities that have the
+  property and satisfy the comparison, so `Status ne 'active'` does not match an
+  entity that has no `Status` at all. Note that Azure and Azurite are themselves
+  inconsistent/buggy on null/missing-property filters, so this is a deliberate,
+  documented choice rather than verified Azure parity. The recursive-descent
+  parser caps parenthesis nesting at `maxFilterDepth` (64) so attacker-supplied
+  deeply nested `(` cannot overflow the goroutine stack; input past the limit
+  returns `errFilter`. The `$filter` and KQL parsers now have direct in-package
+  unit tests (`internal/servers/tableserver/filter_*_test.go` and
+  `internal/servers/monitorserver/{kql,predicate}_test.go`), driven through their
+  public entry points (`parseFilter`, `evalKQL`).
 - **Table `$top` is enforced before appending.** `$top=N` returns at most `N`
   entities, and `$top=0` returns none. The limit check in `listEntities` runs
   before the entity is added to the result, so it is not off by one.
