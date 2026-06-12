@@ -216,6 +216,16 @@ same image.
 - **Blob name encoding.** Blob names may contain `/`. On disk they are stored
   under a URL-safe base64 key; do not assume a 1:1 path mapping. Staged block
   ids are encoded the same way.
+- **Listener failures trigger graceful shutdown, not `os.Exit`.** `run` in
+  `cmd/localaz/main.go` binds the AMQP `net.Listener` *before* starting any
+  serve goroutine and the serve goroutines report a non-graceful
+  `ListenAndServe`/`Serve` error on a buffered error channel instead of calling
+  `os.Exit` inline. `run` selects on both `ctx.Done()` and that channel, then
+  runs the single graceful-shutdown loop (`Shutdown` each `http.Server` with the
+  10s timeout, close the AMQP listener, `wg.Wait`). It **returns an error** so a
+  late bind failure on one listener drains every other listener; only `main`
+  calls `os.Exit(1)` (on a non-nil return). Keep new listeners on this path —
+  never `os.Exit` from inside a serve goroutine.
 
 ## Control plane (AAD + ARM) gotchas
 
