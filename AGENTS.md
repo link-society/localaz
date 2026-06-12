@@ -255,6 +255,13 @@ same image.
   **stable across restarts** (it used to be regenerated per process, which
   broke tokens minted before a restart and stale cached JWKS). With an empty
   data dir the key is generated in-memory only.
+- **User flows carry a user-derived `sub`/`oid`.** When the token request
+  supplies a `username` (ROPC/password, auth code), the emitted access and id
+  tokens set `sub` to the username and `oid` to a stable, GUID-shaped value
+  derived from `sha256(username)` — deterministic across calls and never the
+  client id, so an OIDC consumer keying on `sub`/`oid` distinguishes the user
+  from the app. `appid` is always the client id. `client_credentials` (no
+  username) keeps `sub`/`oid` set to the app/client id.
 - **ARM resource providers are generic.** `armserver/provider.go` stores any
   `.../providers/{ns}/{type}/{name}` body in `armstore` and echoes it back with
   a terminal `provisioningState=Succeeded`, which is enough for the CLI's
