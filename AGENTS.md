@@ -26,29 +26,31 @@ design.
 
 ```
 cmd/localaz            entrypoint / process wiring (one listener per service)
-internal/blobserver    Azure Blob REST protocol (routing, XML, headers, errors)
-internal/blobstore     storage abstraction (the Store interface) + types
-  └── fsstore          filesystem-backed implementation
-internal/queueserver   Azure Queue REST protocol (XML messages, pop receipts)
-internal/queuestore    in-memory queue/message state + JSON persistence
-internal/tableserver   Azure Table REST protocol (OData JSON, $filter, ETags)
-internal/tablestore    in-memory entity state + JSON persistence
-internal/egserver      Event Grid REST protocol (namespace topics, pull delivery)
-internal/egstore       in-memory Event Grid pub/sub state
-internal/wpsserver     Web PubSub (REST + WebSocket)
-internal/sbserver      Service Bus AMQP 1.0 (hand-rolled framing/codec)
-internal/sbstore       in-memory Service Bus broker
-internal/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
-internal/monitorstore  in-memory Monitor Logs tables
-internal/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
-internal/armserver     Resource Manager: cloud metadata, subscriptions, groups
-internal/armstore      in-memory ARM state (one subscription/tenant + groups + generic resources)
-internal/devcert       self-signed TLS material for the control plane
-internal/azerr         faithful Azure error responses
-test/sdk               integration tests via the Azure Go SDKs
-test/e2e               end-to-end tests via the Azure CLI (build tag: e2e)
-docker/                localaz.dockerfile, docker-compose.dev.yml
-docs/                  configuration, supported APIs, testing
+internal/servers/blobserver    Azure Blob REST protocol (routing, XML, headers, errors)
+internal/servers/queueserver   Azure Queue REST protocol (XML messages, pop receipts)
+internal/servers/tableserver   Azure Table REST protocol (OData JSON, $filter, ETags)
+internal/servers/egserver      Event Grid REST protocol (namespace topics, pull delivery)
+internal/servers/wpsserver     Web PubSub (REST + WebSocket)
+internal/servers/sbserver      Service Bus AMQP 1.0 (hand-rolled framing/codec)
+internal/servers/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
+internal/servers/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
+internal/servers/armserver     Resource Manager: cloud metadata, subscriptions, groups
+internal/stores/blobstore      storage abstraction (the Store interface) + types
+  └── fsstore                  filesystem-backed implementation
+internal/stores/queuestore     in-memory queue/message state + JSON persistence
+internal/stores/tablestore     in-memory entity state + JSON persistence
+internal/stores/egstore        in-memory Event Grid pub/sub state
+internal/stores/sbstore        in-memory Service Bus broker
+internal/stores/monitorstore   in-memory Monitor Logs tables
+internal/stores/armstore       in-memory ARM state (one subscription/tenant + groups + generic resources)
+internal/utils/httpx           shared HTTP helpers
+internal/utils/azwire          shared Azure wire-format helpers
+internal/utils/azerr           faithful Azure error responses
+internal/utils/devcert               self-signed TLS material for the control plane
+test/sdk                       integration tests via the Azure Go SDKs
+test/e2e                       end-to-end tests via the Azure CLI (build tag: e2e)
+docker/                        localaz.dockerfile, docker-compose.dev.yml
+docs/                          configuration, supported APIs, testing
 ```
 
 ## Services and ports
@@ -75,9 +77,10 @@ enabled (`-tls-auto`, or `-tls-cert`/`-tls-key`).
 ## Conventions
 
 - **One structure and its methods per file.** Keep files focused and short.
-  Put shared helpers in a `helpers.go` (or similarly named) file. `fsstore` is
-  the reference for this: `store.go`, `types.go`, `paths.go`, `helpers.go`,
-  `persistence.go`, `containers.go`, `blobs.go`, `blocks.go`.
+  Put shared helpers in a `helpers.go` (or similarly named) file.
+  `stores/blobstore/fsstore` is the reference for this: `store.go`, `types.go`,
+  `paths.go`, `helpers.go`, `persistence.go`, `containers.go`, `blobs.go`,
+  `blocks.go`.
 - **The protocol layer depends only on the store interface.** Never let a
   `*server` package reach into a concrete backend; depend on the
   `<svc>store.Store` type only.
@@ -110,9 +113,10 @@ exclude all Go files".
 
 ## Adding a new service
 
-1. Define `internal/<svc>store` with a `Store` interface and shared types.
-2. Implement the protocol in `internal/<svc>server`, depending only on that
-   interface.
+1. Define `internal/stores/<svc>store` with a `Store` interface and shared
+   types.
+2. Implement the protocol in `internal/servers/<svc>server`, depending only on
+   that interface.
 3. Mount it in `cmd/localaz` on the same process, matching Azure's endpoint
    conventions. HTTP services join the `services` slice; a non-HTTP service
    (like Service Bus AMQP) gets its own `net.Listen` accept loop and is wired

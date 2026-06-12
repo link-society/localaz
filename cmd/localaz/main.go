@@ -19,23 +19,23 @@ import (
 	"syscall"
 	"time"
 
-	"localaz.dev/internal/aadserver"
-	"localaz.dev/internal/armserver"
-	"localaz.dev/internal/armstore"
-	"localaz.dev/internal/blobserver"
-	"localaz.dev/internal/blobstore/fsstore"
-	"localaz.dev/internal/devcert"
-	"localaz.dev/internal/egserver"
-	"localaz.dev/internal/egstore"
-	"localaz.dev/internal/monitorserver"
-	"localaz.dev/internal/monitorstore"
-	"localaz.dev/internal/queueserver"
-	"localaz.dev/internal/queuestore"
-	"localaz.dev/internal/sbserver"
-	"localaz.dev/internal/sbstore"
-	"localaz.dev/internal/tableserver"
-	"localaz.dev/internal/tablestore"
-	"localaz.dev/internal/wpsserver"
+	"localaz.dev/internal/utils/devcert"
+	"localaz.dev/internal/servers/aadserver"
+	"localaz.dev/internal/servers/armserver"
+	"localaz.dev/internal/servers/blobserver"
+	"localaz.dev/internal/servers/egserver"
+	"localaz.dev/internal/servers/monitorserver"
+	"localaz.dev/internal/servers/queueserver"
+	"localaz.dev/internal/servers/sbserver"
+	"localaz.dev/internal/servers/tableserver"
+	"localaz.dev/internal/servers/wpsserver"
+	"localaz.dev/internal/stores/armstore"
+	"localaz.dev/internal/stores/blobstore/fsstore"
+	"localaz.dev/internal/stores/egstore"
+	"localaz.dev/internal/stores/monitorstore"
+	"localaz.dev/internal/stores/queuestore"
+	"localaz.dev/internal/stores/sbstore"
+	"localaz.dev/internal/stores/tablestore"
 )
 
 func main() {
@@ -60,34 +60,15 @@ func main() {
 	slog.SetDefault(logger)
 
 	tlsCert, err := loadTLS(logger, *dataDir, *tlsCertFile, *tlsKeyFile, *tlsAuto)
-	if err != nil {
-		logger.Error("init tls", "err", err)
-		os.Exit(1)
-	}
-
+	fatal(logger, "init tls", err)
 	blobStore, err := fsstore.New(*dataDir)
-	if err != nil {
-		logger.Error("init blob store", "err", err)
-		os.Exit(1)
-	}
-
+	fatal(logger, "init blob store", err)
 	queueStore, err := queuestore.New(*dataDir)
-	if err != nil {
-		logger.Error("init queue store", "err", err)
-		os.Exit(1)
-	}
-
+	fatal(logger, "init queue store", err)
 	tableStore, err := tablestore.New(*dataDir)
-	if err != nil {
-		logger.Error("init table store", "err", err)
-		os.Exit(1)
-	}
-
+	fatal(logger, "init table store", err)
 	aadServer, err := aadserver.New()
-	if err != nil {
-		logger.Error("init aad server", "err", err)
-		os.Exit(1)
-	}
+	fatal(logger, "init aad server", err)
 
 	scheme := "http"
 	if tlsCert != nil {
@@ -207,6 +188,15 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// fatal logs what and exits when err is non-nil. It collapses the repeated
+// "initialise dependency or die" wiring in main.
+func fatal(logger *slog.Logger, what string, err error) {
+	if err != nil {
+		logger.Error(what, "err", err)
+		os.Exit(1)
+	}
 }
 
 // loadTLS resolves the certificate used by the bearer/control-plane services.

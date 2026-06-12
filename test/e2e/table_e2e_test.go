@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-func requireTable(t *testing.T) {
-	t.Helper()
-	if tableEndpoint == "" {
-		t.Skip("table endpoint not configured")
-	}
-}
-
 func TestTableLifecycle(t *testing.T) {
 	requireTable(t)
 	name := uniqueName("e2etable")

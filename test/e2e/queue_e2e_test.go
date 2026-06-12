@@ -7,13 +7,6 @@ import (
 	"testing"
 )
 
-func requireQueue(t *testing.T) {
-	t.Helper()
-	if queueEndpoint == "" {
-		t.Skip("queue endpoint not configured")
-	}
-}
-
 func TestQueueLifecycle(t *testing.T) {
 	requireQueue(t)
 	name := uniqueName("e2e-queue")

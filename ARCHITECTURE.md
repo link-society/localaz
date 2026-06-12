@@ -27,7 +27,7 @@ internal/monitorstore  in-memory Monitor Logs tables
 internal/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
 internal/armserver     Resource Manager: cloud metadata, subscriptions, groups
 internal/armstore      in-memory ARM state (one subscription/tenant + groups)
-internal/devcert       self-signed TLS material for the control plane
+internal/utils/devcert       self-signed TLS material for the control plane
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
 test/e2e               end-to-end tests via the Azure CLI

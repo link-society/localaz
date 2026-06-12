@@ -3,14 +3,10 @@
 package e2e
 
 import (
-	"bytes"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -246,80 +242,4 @@ func TestControlPlaneCLI(t *testing.T) {
 			t.Fatalf("queue list count after delete = %q, want 0", got)
 		}
 	})
-}
-
-// mustFreeAddr reserves a loopback address with a free port.
-func mustFreeAddr(t *testing.T) string {
-	t.Helper()
-	p, err := freePort()
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	return fmt.Sprintf("127.0.0.1:%d", p)
-}
-
-// azTolerate runs an Azure CLI command, treating a failure whose stderr
-// contains allowedErr as success. Any other failure fails the test.
-func azTolerate(t *testing.T, allowedErr string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("az", args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if strings.Contains(stderr.String(), allowedErr) {
-			return
-		}
-		t.Fatalf("az %s\n  error: %v\n  stderr: %s", strings.Join(args, " "), err, stderr.String())
-	}
-}
-
-// insecureClient returns an HTTP client that trusts the emulator's self-signed
-// TLS certificate. It is used only by the test harness; the Azure CLI verifies
-// the certificate via REQUESTS_CA_BUNDLE/SSL_CERT_FILE.
-func insecureClient() *http.Client {
-	return &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
-	}
-}
-
-// waitForReadyClient polls url until it returns 200 or the deadline elapses.
-func waitForReadyClient(client *http.Client, url string) error {
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(url)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	return fmt.Errorf("endpoint did not become ready: %s", url)
-}
-
-// seedLogs ingests a few records into the AppLogs_CL custom table through the
-// Logs Ingestion API, giving the KQL subtests a dataset with both string and
-// numeric columns to filter, sort and count over.
-func seedLogs(t *testing.T, client *http.Client, monitorURL string) {
-	t.Helper()
-	body := []byte(`[` +
-		`{"Level":"info","Message":"hi","Code":200,"Source":"api"},` +
-		`{"Level":"error","Message":"boom","Code":500,"Source":"api"},` +
-		`{"Level":"warning","Message":"slow","Code":300,"Source":"worker"},` +
-		`{"Level":"error","Message":"kaput","Code":503,"Source":"worker"},` +
-		`{"Level":"info","Message":"ok","Code":201,"Source":"api"}` +
-		`]`)
-	url := monitorURL + "/dataCollectionRules/dcr1/streams/Custom-AppLogs_CL"
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("seed logs: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("seed logs status = %d, want 204", resp.StatusCode)
-	}
 }
