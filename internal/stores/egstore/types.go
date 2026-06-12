@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 )
 
 // topic is a named Event Grid topic. backlog retains every published event so
@@ -36,10 +37,13 @@ type subscription struct {
 	locked    map[string]*delivery
 }
 
-// delivery couples a stored event with its current delivery count.
+// delivery couples a stored event with its current delivery count. While the
+// event is locked, lockDeadline is the time at which the lock expires and the
+// event becomes eligible for redelivery; it is unset (zero) while available.
 type delivery struct {
 	event         json.RawMessage
 	deliveryCount int
+	lockDeadline  time.Time
 }
 
 // Received is a single locked event returned from Receive.

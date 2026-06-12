@@ -153,6 +153,14 @@ same image.
   Monitor Logs do not persist — their traffic is transient, so there is no
   `/data` format for them. The AAD/ARM control plane is in-memory too (one
   fixed subscription/tenant plus runtime resource groups).
+- **Event Grid lock tokens expire.** A `Receive` (`egstore`) locks each event
+  with a deadline of `now + lockDuration` (default 5 minutes; clock is the
+  injectable `Store.now`). Locks are swept lazily on the *next* `Receive` of
+  that subscription — no background goroutine, mirroring
+  `queuestore.evictExpired`-on-lookup — so an event left unacknowledged by a
+  disconnected consumer is returned to `available` and redelivered with a
+  higher `DeliveryCount`. `RenewLocks` actually extends the deadline (and still
+  fails unknown tokens); it is no longer a no-op.
 - **Monitor Logs is two data planes on one port.** Ingestion
   (`POST /dataCollectionRules/{rule}/streams/{stream}`, returns `204`) and the
   Log Analytics query (`POST /v1/workspaces/{id}/query`, returns `200`) share
