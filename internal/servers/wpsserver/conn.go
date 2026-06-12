@@ -6,33 +6,98 @@ import (
 	"encoding/json"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
 
+const (
+	// outboundBuffer bounds the per-connection send queue. A client that
+	// cannot keep up fills this buffer and is then dropped, so one slow
+	// consumer never stalls a broadcast or holds the hub lock.
+	outboundBuffer = 64
+	// writeWait is the deadline applied to each socket write.
+	writeWait = 10 * time.Second
+	// readLimit caps the size of an inbound frame to bound memory use.
+	readLimit = 1 << 20
+)
+
+// wsSocket is the subset of *websocket.Conn that wsConn depends on. It exists
+// so the socket can be stubbed in tests without a live network connection.
+type wsSocket interface {
+	WriteMessage(messageType int, data []byte) error
+	ReadMessage() (messageType int, p []byte, err error)
+	Close() error
+	SetReadLimit(limit int64)
+	SetWriteDeadline(t time.Time) error
+}
+
 // wsConn adapts a gorilla WebSocket to the conn interface and runs the
-// json.webpubsub.azure.v1 protocol loop.
+// json.webpubsub.azure.v1 protocol loop. Outbound frames go through a buffered
+// channel drained by a dedicated writer goroutine, so send is non-blocking and
+// a stalled client is dropped rather than stalling the hub.
 type wsConn struct {
 	connID string
 	user   string
-	socket *websocket.Conn
+	socket wsSocket
 	hub    *hub
 
-	writeMu sync.Mutex
-	once    sync.Once
+	outbound chan []byte
+	quit     chan struct{}
+	once     sync.Once
+}
+
+// newWSConn builds a wsConn with a buffered outbound queue of the given size.
+func newWSConn(connID, user string, socket wsSocket, h *hub, bufSize int) *wsConn {
+	return &wsConn{
+		connID:   connID,
+		user:     user,
+		socket:   socket,
+		hub:      h,
+		outbound: make(chan []byte, bufSize),
+		quit:     make(chan struct{}),
+	}
 }
 
 func (c *wsConn) id() string     { return c.connID }
 func (c *wsConn) userID() string { return c.user }
 
+// send enqueues a frame for the writer goroutine without ever blocking the
+// caller. If the outbound buffer is full the consumer is too slow, so the
+// connection is dropped instead of stalling the hub (and the hub lock).
 func (c *wsConn) send(frame []byte) {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	_ = c.socket.WriteMessage(websocket.TextMessage, frame)
+	select {
+	case <-c.quit:
+		// Already closing; drop silently.
+	case c.outbound <- frame:
+	default:
+		// Buffer full: slow consumer. Drop the connection.
+		c.closeNow()
+	}
+}
+
+// startWriter launches the goroutine that drains the outbound queue and writes
+// to the socket, applying a per-message write deadline.
+func (c *wsConn) startWriter() {
+	go func() {
+		for {
+			select {
+			case <-c.quit:
+				return
+			case frame := <-c.outbound:
+				_ = c.socket.SetWriteDeadline(time.Now().Add(writeWait))
+				if err := c.socket.WriteMessage(websocket.TextMessage, frame); err != nil {
+					c.closeNow()
+					return
+				}
+			}
+		}
+	}()
 }
 
 func (c *wsConn) closeNow() {
 	c.once.Do(func() {
+		close(c.quit)
 		_ = c.socket.Close()
 	})
 }
@@ -40,6 +105,9 @@ func (c *wsConn) closeNow() {
 // run sends the connected frame, joins any groups carried in the token, then
 // reads client messages until the socket closes.
 func (c *wsConn) run(initialGroups []string) {
+	c.socket.SetReadLimit(readLimit)
+	c.startWriter()
+
 	c.hub.add(c)
 	defer c.hub.remove(c.connID)
 	defer c.closeNow()
