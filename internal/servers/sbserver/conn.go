@@ -191,8 +191,9 @@ func (c *conn) onAttach(f *frame) error {
 	}
 
 	if clientIsSender {
-		// We are the receiver: grant credit so the client can send.
-		return c.grantCredit(f.channel, handle, 5000)
+		// We are the receiver: grant credit so the client can send. Credit is
+		// later replenished in onTransfer as the window is consumed.
+		return c.grantCredit(f.channel, handle, 0, senderInitialCredit)
 	}
 
 	// CBS responses are delivered directly (see handleCBS); other receiver
@@ -203,15 +204,18 @@ func (c *conn) onAttach(f *frame) error {
 	return nil
 }
 
-// grantCredit sends a flow frame extending link-credit to the client.
-func (c *conn) grantCredit(channel uint16, handle, credit uint32) error {
+// grantCredit sends a flow frame extending link-credit to the client. The
+// delivery-count must mirror the number of transfers received on the link so the
+// client recomputes its outstanding window (delivery-count + link-credit minus
+// its own sent count) as exactly link-credit, never stalling.
+func (c *conn) grantCredit(channel uint16, handle, deliveryCount, credit uint32) error {
 	return c.writeAMQP(channel, descFlow, []any{
 		uint32(0),     // next-incoming-id
 		uint32(65535), // incoming-window
 		uint32(0),     // next-outgoing-id
 		uint32(65535), // outgoing-window
 		handle,        // handle
-		uint32(0),     // delivery-count
+		deliveryCount, // delivery-count
 		credit,        // link-credit
 	}, nil)
 }
@@ -255,6 +259,7 @@ func (c *conn) onFlow(f *frame) error {
 func (c *conn) onTransfer(f *frame) error {
 	handle := asUint32(f.field(0))
 	deliveryID := asUint32(f.field(1))
+	more := asBool(f.field(5))
 
 	c.linksMu.Lock()
 	l := c.links[linkKey(f.channel, handle)]
@@ -263,15 +268,36 @@ func (c *conn) onTransfer(f *frame) error {
 		return nil
 	}
 
+	// A multi-frame message is split across several transfers with more==true on
+	// all but the last. Buffer the partial body and wait for the final frame
+	// before delivering or settling — otherwise fragments are relayed as
+	// corrupted standalone messages.
+	if more {
+		l.appendPartial(f.payload)
+		return nil
+	}
+	msg := l.takePartial(f.payload)
+
 	if l.isCBS {
-		if err := c.handleCBS(l, f.payload); err != nil {
+		if err := c.handleCBS(l, msg); err != nil {
 			return err
 		}
 	} else {
-		c.broker.Send(l.address, f.payload)
+		c.broker.Send(l.address, msg)
 	}
 
-	// Settle the incoming delivery as accepted.
+	// Replenish the sender's credit window as it is consumed so the go-amqp
+	// client never exhausts its local link-credit and blocks. CBS links use the
+	// management request/response pattern and are not credit-driven here.
+	if !l.isCBS {
+		if replenish, received := l.recordReceived(); replenish {
+			if err := c.grantCredit(f.channel, handle, received, senderInitialCredit); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Settle the completed delivery as accepted.
 	return c.writeAMQP(f.channel, descDisposition, []any{
 		true,       // role: receiver
 		deliveryID, // first
