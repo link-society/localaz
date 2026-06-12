@@ -124,8 +124,9 @@ func TestTableETagMatchesTimestampSevenDigits(t *testing.T) {
 	// case that previously dropped zeros in the ETag.
 	var props map[string]json.RawMessage
 	for i := 0; i < 200; i++ {
-		insertEntity(t, base, "items", "p", "r")
-		props = getEntity(t, base, "items", "p", "r")
+		rk := "r" + itoa(i)
+		insertEntity(t, base, "items", "p", rk)
+		props = getEntity(t, base, "items", "p", rk)
 		ts := stringField(t, props, "Timestamp")
 		// The Timestamp is rendered with the fixed seven-digit layout. We want
 		// a value whose ETag-relevant fractional part exposes trailing zeros.
