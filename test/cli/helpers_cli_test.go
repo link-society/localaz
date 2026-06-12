@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build cli
 
-package e2e
+package cli
 
 import (
 	"bytes"
@@ -32,13 +32,13 @@ var (
 
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("az"); err != nil {
-		fmt.Println("e2e: skipping, the Azure CLI (az) is not installed")
+		fmt.Println("cli: skipping, the Azure CLI (az) is not installed")
 		os.Exit(0)
 	}
 
 	stop, err := setup()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "e2e: setup failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "cli: setup failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -49,12 +49,12 @@ func TestMain(m *testing.M) {
 }
 
 // setup resolves the endpoints, launching a local emulator when one is not
-// supplied via LOCALAZ_E2E_ENDPOINT, and returns a teardown function.
+// supplied via LOCALAZ_CLI_ENDPOINT, and returns a teardown function.
 func setup() (func(), error) {
-	if ep := os.Getenv("LOCALAZ_E2E_ENDPOINT"); ep != "" {
+	if ep := os.Getenv("LOCALAZ_CLI_ENDPOINT"); ep != "" {
 		blobEndpoint = ep
-		queueEndpoint = os.Getenv("LOCALAZ_E2E_QUEUE_ENDPOINT")
-		tableEndpoint = os.Getenv("LOCALAZ_E2E_TABLE_ENDPOINT")
+		queueEndpoint = os.Getenv("LOCALAZ_CLI_QUEUE_ENDPOINT")
+		tableEndpoint = os.Getenv("LOCALAZ_CLI_TABLE_ENDPOINT")
 		if err := waitForReady(blobEndpoint + "?comp=list"); err != nil {
 			return nil, err
 		}
@@ -65,7 +65,7 @@ func setup() (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	tmp, err := os.MkdirTemp("", "localaz-e2e-")
+	tmp, err := os.MkdirTemp("", "localaz-cli-")
 	if err != nil {
 		return nil, err
 	}

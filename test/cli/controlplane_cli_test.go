@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build cli
 
-package e2e
+package cli
 
 import (
 	"fmt"
@@ -40,7 +40,7 @@ func TestControlPlaneCLI(t *testing.T) {
 	aadAddr := mustFreeAddr(t)
 	armAddr := mustFreeAddr(t)
 	dataDir := filepath.Join(tmp, "data")
-	const cloudName = "localaze2e"
+	const cloudName = "localazcli"
 
 	srv := exec.Command(bin,
 		"-tls-auto",
@@ -136,7 +136,7 @@ func TestControlPlaneCLI(t *testing.T) {
 		t.Fatalf("account user type = %q, want servicePrincipal", got)
 	}
 
-	const rg = "e2e-rg"
+	const rg = "cli-rg"
 	if got := az(t, "group", "create", "-n", rg, "-l", "localaz",
 		"--query", "properties.provisioningState", "-o", "tsv"); got != "Succeeded" {
 		t.Fatalf("resource group provisioning state = %q, want Succeeded", got)
@@ -199,13 +199,13 @@ func TestControlPlaneCLI(t *testing.T) {
 	// CLI: namespace, queue and topic/subscription management resolve to
 	// localaz because the CLI talks to the emulated Resource Manager.
 	t.Run("ServiceBus", func(t *testing.T) {
-		const sbRG = "sb-e2e-rg"
+		const sbRG = "sb-cli-rg"
 		az(t, "group", "create", "-n", sbRG, "-l", "localaz", "--output", "none")
 		t.Cleanup(func() {
 			az(t, "group", "delete", "-n", sbRG, "-y", "--output", "none")
 		})
 
-		ns := fmt.Sprintf("sbe2e%d", time.Now().UnixNano())
+		ns := fmt.Sprintf("sbcli%d", time.Now().UnixNano())
 		if got := az(t, "servicebus", "namespace", "create",
 			"-g", sbRG, "-n", ns, "-l", "localaz", "--sku", "Standard",
 			"--query", "provisioningState", "-o", "tsv"); got != "Succeeded" {

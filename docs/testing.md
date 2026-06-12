@@ -24,17 +24,17 @@ endpoint (or, for Service Bus, a `UseDevelopmentEmulator=true` connection
 string), so they can be pointed at localaz and exercise the real wire protocol
 end to end.
 
-## End-to-end suite (`test/e2e`)
+## End-to-end suite (`test/cli`)
 
 Driven by the real **Azure CLI** (`az`) as a subprocess. This is the strongest
 interoperability signal: the CLI builds, signs, and parses requests exactly as
-it would against Azure. The suite is guarded by the `e2e` build tag so it never
+it would against Azure. The suite is guarded by the `cli` build tag so it never
 runs as part of `go test ./...`.
 
 ```bash
-task test:e2e
+task test:cli
 # or
-go test -tags e2e -count=1 -v ./test/e2e/...
+go test -tags cli -count=1 -v ./test/cli/...
 ```
 
 Requirements: the `az` CLI must be installed. If it is not, the suite skips
@@ -42,17 +42,17 @@ itself cleanly.
 
 By default the suite builds and launches localaz on a free local port, runs the
 checks, and tears everything down. To run it against an already-running instance
-(for example the Docker container), set `LOCALAZ_E2E_ENDPOINT`:
+(for example the Docker container), set `LOCALAZ_CLI_ENDPOINT`:
 
 ```bash
 task docker:up
-LOCALAZ_E2E_ENDPOINT=http://127.0.0.1:10000/devstoreaccount1 \
-  go test -tags e2e -count=1 -v ./test/e2e/...
+LOCALAZ_CLI_ENDPOINT=http://127.0.0.1:10000/devstoreaccount1 \
+  go test -tags cli -count=1 -v ./test/cli/...
 ```
 
-### Which services the E2E suite covers
+### Which services the CLI suite covers
 
-The E2E suite exercises the storage data-plane services whose CLI commands can
+The CLI suite exercises the storage data-plane services whose CLI commands can
 be redirected to a local endpoint, and skips the rest:
 
 - **Blob** — `az storage` supports a custom data-plane endpoint via
@@ -114,11 +114,11 @@ For the pub/sub services the **SDK suite** above is the equivalent end-to-end
 signal: it drives the official clients against localaz over the real protocol,
 which the CLI is simply unable to do locally. When launched by the suite, the
 connection string includes the Blob, Queue and Table endpoints; in
-`LOCALAZ_E2E_ENDPOINT` mode the queue and table tests additionally read
-`LOCALAZ_E2E_QUEUE_ENDPOINT` and `LOCALAZ_E2E_TABLE_ENDPOINT` (skipping if
+`LOCALAZ_CLI_ENDPOINT` mode the queue and table tests additionally read
+`LOCALAZ_CLI_QUEUE_ENDPOINT` and `LOCALAZ_CLI_TABLE_ENDPOINT` (skipping if
 unset).
 
-## Why Go for the E2E suite (instead of a shell script)
+## Why Go for the CLI suite (instead of a shell script)
 
 The end-to-end tests are written as Go tests that shell out to `az`, rather than
 as a bash script. The trade-offs that motivated this:

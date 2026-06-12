@@ -5,4 +5,4 @@ data/
 .git/
 .gitignore
 *.md
-test/e2e/.out/
+test/cli/.out/

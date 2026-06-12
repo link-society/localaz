@@ -3,7 +3,7 @@
 # Common commands:
 #   task build           build the binary
 #   task test:unit       run the Go SDK integration tests
-#   task test:e2e        run the Azure CLI end-to-end tests
+#   task test:cli        run the Azure CLI end-to-end tests
 #   task docker:up       start the dev container
 #   eval "$(task env:conn-string)"   export the connection string for `az`
 version: "3"
@@ -53,17 +53,17 @@ tasks:
     desc: Run the unit and end-to-end test suites
     cmds:
       - task: test:unit
-      - task: test:e2e
+      - task: test:cli
 
   test:unit:
     desc: Run the Go SDK integration tests (self-contained, no Docker needed)
     cmds:
       - go test ./...
 
-  test:e2e:
+  test:cli:
     desc: Run the Azure CLI end-to-end tests (requires the az CLI)
     cmds:
-      - go test -tags e2e -count=1 -v ./test/e2e/...
+      - go test -tags cli -count=1 -v ./test/cli/...
 
   docker:build:
     desc: Build the Docker image

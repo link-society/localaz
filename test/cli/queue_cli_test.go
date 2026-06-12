@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build cli
 
-package e2e
+package cli
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 func TestQueueLifecycle(t *testing.T) {
 	requireQueue(t)
-	name := uniqueName("e2e-queue")
+	name := uniqueName("cli-queue")
 
 	az(t, "storage", "queue", "create", "--name", name, "--output", "none")
 
@@ -25,7 +25,7 @@ func TestQueueLifecycle(t *testing.T) {
 
 func TestQueueMessageRoundTrip(t *testing.T) {
 	requireQueue(t)
-	name := uniqueName("e2e-msg")
+	name := uniqueName("cli-msg")
 	az(t, "storage", "queue", "create", "--name", name, "--output", "none")
 	t.Cleanup(func() {
 		az(t, "storage", "queue", "delete", "--name", name, "--output", "none")

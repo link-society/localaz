@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build cli
 
-package e2e
+package cli
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 
 func TestTableLifecycle(t *testing.T) {
 	requireTable(t)
-	name := uniqueName("e2etable")
+	name := uniqueName("clitable")
 
 	az(t, "storage", "table", "create", "--name", name, "--output", "none")
 
@@ -25,7 +25,7 @@ func TestTableLifecycle(t *testing.T) {
 
 func TestTableEntityRoundTrip(t *testing.T) {
 	requireTable(t)
-	name := uniqueName("e2eentity")
+	name := uniqueName("clientity")
 	az(t, "storage", "table", "create", "--name", name, "--output", "none")
 	t.Cleanup(func() {
 		az(t, "storage", "table", "delete", "--name", name, "--output", "none")

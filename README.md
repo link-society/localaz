@@ -101,7 +101,7 @@ task                 # list all tasks
 task build           # build the binary
 task run             # run locally
 task test:unit       # Go SDK integration suite
-task test:e2e        # Azure CLI end-to-end suite (requires az)
+task test:cli        # Azure CLI end-to-end suite (requires az)
 task lint            # gofmt check + go vet
 task docker:build    # build the container image
 task docker:up       # run the dev compose stack
@@ -114,7 +114,7 @@ task env:conn-string # print an export line for the connection string
 - [Architecture](ARCHITECTURE.md) — process layout and design decisions.
 - [Configuration](docs/configuration.md) — flags, env vars, endpoint and credentials.
 - [Supported APIs](docs/supported-apis.md) — implemented operations and roadmap.
-- [Testing](docs/testing.md) — running the suites and why the E2E suite is in Go.
+- [Testing](docs/testing.md) — running the suites and why the CLI suite is in Go.
 - [AGENTS.md](AGENTS.md) — guide for AI agents and contributors working on the code.
 
 ## Roadmap

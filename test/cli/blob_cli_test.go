@@ -1,6 +1,6 @@
-//go:build e2e
+//go:build cli
 
-package e2e
+package cli
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestContainerLifecycle(t *testing.T) {
-	name := uniqueName("e2e-life")
+	name := uniqueName("cli-life")
 
 	az(t, "storage", "container", "create", "--name", name, "--output", "none")
 
@@ -25,7 +25,7 @@ func TestContainerLifecycle(t *testing.T) {
 }
 
 func TestBlobRoundTrip(t *testing.T) {
-	container := uniqueName("e2e-blob")
+	container := uniqueName("cli-blob")
 	az(t, "storage", "container", "create", "--name", container, "--output", "none")
 	t.Cleanup(func() {
 		az(t, "storage", "container", "delete", "--name", container, "--output", "none")
@@ -34,7 +34,7 @@ func TestBlobRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src.txt")
 	dst := filepath.Join(dir, "dst.txt")
-	payload := "hello from the azure cli e2e suite\n"
+	payload := "hello from the azure cli cli suite\n"
 	if err := os.WriteFile(src, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
 	}

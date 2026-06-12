@@ -30,7 +30,7 @@ internal/armstore      in-memory ARM state (one subscription/tenant + groups)
 internal/utils/devcert       self-signed TLS material for the control plane
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
-test/e2e               end-to-end tests via the Azure CLI
+test/cli               end-to-end tests via the Azure CLI
 docker/                Dockerfile and dev compose stack
 docs/                  configuration, supported APIs, testing
 ```
@@ -126,7 +126,7 @@ A new service follows the same pattern Queue and Table did:
 3. Mount it in `cmd/localaz` on the same process (its own port, matching Azure's
    endpoint conventions): HTTP services join the `services` slice; a raw-TCP
    service (like Service Bus AMQP) gets its own accept loop.
-4. Add a Go SDK suite under `test/sdk` and CLI coverage under `test/e2e`.
+4. Add a Go SDK suite under `test/sdk` and CLI coverage under `test/cli`.
 
 ## The pub/sub services
 

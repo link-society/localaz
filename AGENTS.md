@@ -48,7 +48,7 @@ internal/utils/azwire          shared Azure wire-format helpers
 internal/utils/azerr           faithful Azure error responses
 internal/utils/devcert               self-signed TLS material for the control plane
 test/sdk                       integration tests via the Azure Go SDKs
-test/e2e                       end-to-end tests via the Azure CLI (build tag: e2e)
+test/cli                       end-to-end tests via the Azure CLI (build tag: cli)
 docker/                        localaz.dockerfile, docker-compose.dev.yml
 docs/                          configuration, supported APIs, testing
 ```
@@ -100,14 +100,14 @@ Use Task (see [Taskfile.yml](Taskfile.yml)):
 task build        # build the binary
 task run          # run locally
 task test:unit    # go test ./...  (Go SDK suite, self-contained)
-task test:e2e     # go test -tags e2e ./test/e2e/...  (requires az)
+task test:cli     # go test -tags cli ./test/cli/...  (requires az)
 task lint         # gofmt check + go vet
 task docker:build # build the container image
 task docker:up    # docker compose -f docker/docker-compose.dev.yml up --build
 ```
 
-The E2E suite shells out to the real `az` CLI and is guarded by the `e2e` build
-tag so it never runs under `task test:unit`. `test/e2e/doc.go` is an untagged
+The CLI suite shells out to the real `az` CLI and is guarded by the `cli` build
+tag so it never runs under `task test:unit`. `test/cli/doc.go` is an untagged
 package doc file so `go test ./...` does not fail with "build constraints
 exclude all Go files".
 
@@ -121,7 +121,7 @@ exclude all Go files".
    conventions. HTTP services join the `services` slice; a non-HTTP service
    (like Service Bus AMQP) gets its own `net.Listen` accept loop and is wired
    into the same graceful-shutdown path.
-4. Add a Go SDK suite in `test/sdk` and CLI coverage in `test/e2e`.
+4. Add a Go SDK suite in `test/sdk` and CLI coverage in `test/cli`.
 
 Keep the single-container promise: anything a backend needs is embedded in the
 same image.
@@ -204,7 +204,7 @@ same image.
   and auto-creates entities on first data-plane use, so the RP does not
   pre-provision them. To learn the exact paths a new CLI command needs, run the
   emulator with request logging and watch the `service=arm` log lines.
-- **The e2e control-plane test isolates `AZURE_CONFIG_DIR`** to a temp dir so it
+- **The cli control-plane test isolates `AZURE_CONFIG_DIR`** to a temp dir so it
   never touches the developer's real clouds/logins, but points
   `AZURE_EXTENSION_DIR` at the real extension dir for the `log-analytics`
   command (skips if that extension is absent).
