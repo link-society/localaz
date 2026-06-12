@@ -1,0 +1,8 @@
+# Local build artifacts and state that must never end up in the image context.
+data/
+*.test
+/localaz
+.git/
+.gitignore
+*.md
+test/e2e/.out/

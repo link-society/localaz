@@ -1,0 +1,96 @@
+# Taskfile for localaz. See https://taskfile.dev
+#
+# Common commands:
+#   task build           build the binary
+#   task test:unit       run the Go SDK integration tests
+#   task test:e2e        run the Azure CLI end-to-end tests
+#   task docker:up       start the dev container
+#   eval "$(task env:conn-string)"   export the connection string for `az`
+version: "3"
+
+vars:
+  ACCOUNT: devstoreaccount1
+  # Azurite's well-known development account key. The emulator does not verify
+  # the Shared Key signature, but the CLI/SDK require a syntactically valid key.
+  KEY: Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+  HOST: 127.0.0.1
+  PORT: "10000"
+  IMAGE: localaz:dev
+  BIN: ./out/localaz
+  COMPOSE: docker compose -f docker/docker-compose.dev.yml
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the localaz binary
+    cmds:
+      - go build -o {{.BIN}} ./cmd/localaz
+
+  run:
+    desc: Build and run localaz locally
+    deps: [build]
+    cmds:
+      - "{{.BIN}} -addr :{{.PORT}} -data ./data"
+
+  lint:
+    desc: Check formatting and run go vet
+    cmds:
+      - test -z "$(gofmt -l ./cmd ./internal ./test)"
+      - go vet ./...
+
+  fmt:
+    desc: Format all Go code
+    cmds:
+      - gofmt -w ./cmd ./internal ./test
+
+  test:
+    desc: Run the unit and end-to-end test suites
+    cmds:
+      - task: test:unit
+      - task: test:e2e
+
+  test:unit:
+    desc: Run the Go SDK integration tests (self-contained, no Docker needed)
+    cmds:
+      - go test ./...
+
+  test:e2e:
+    desc: Run the Azure CLI end-to-end tests (requires the az CLI)
+    cmds:
+      - go test -tags e2e -count=1 -v ./test/e2e/...
+
+  docker:build:
+    desc: Build the Docker image
+    cmds:
+      - docker build -f docker/localaz.dockerfile -t {{.IMAGE}} .
+
+  docker:up:
+    desc: Start the dev container in the background
+    cmds:
+      - "{{.COMPOSE}} up --build -d"
+
+  docker:down:
+    desc: Stop and remove the dev container
+    cmds:
+      - "{{.COMPOSE}} down"
+
+  docker:logs:
+    desc: Tail the dev container logs
+    cmds:
+      - "{{.COMPOSE}} logs -f"
+
+  env:conn-string:
+    desc: Print the AZURE_STORAGE_CONNECTION_STRING export line (use with eval)
+    silent: true
+    cmds:
+      - echo 'export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName={{.ACCOUNT}};AccountKey={{.KEY}};BlobEndpoint=http://{{.HOST}}:{{.PORT}}/{{.ACCOUNT}};"'
+
+  clean:
+    desc: Remove build artifacts and local state
+    cmds:
+      - rm -rf ./out ./data
+      - go clean -testcache

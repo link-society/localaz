@@ -1,0 +1,12 @@
+# Build output
+/localaz
+/out/
+test/e2e/.out/
+*.test
+*.out
+
+# Local emulator state
+/data/
+
+# Editor / OS
+.DS_Store

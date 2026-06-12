@@ -1,0 +1,24 @@
+# localaz development stack — the single container users run.
+#
+#   task docker:up
+#   # or, directly:
+#   docker compose -f docker/docker-compose.dev.yml up --build
+#
+# The Blob endpoint is then available at http://127.0.0.1:10000/devstoreaccount1
+services:
+  localaz:
+    build:
+      context: ..
+      dockerfile: docker/localaz.dockerfile
+    image: localaz:dev
+    container_name: localaz
+    ports:
+      - "10000:10000"
+    volumes:
+      - localaz-data:/data
+    environment:
+      LOCALAZ_BLOB_ADDR: ":10000"
+      LOCALAZ_DATA_DIR: "/data"
+
+volumes:
+  localaz-data:
