@@ -1,6 +1,7 @@
 package fsstore
 
 import (
+	"encoding/base64"
 	"os"
 	"sort"
 	"strings"
@@ -8,6 +9,10 @@ import (
 
 	"localaz.dev/internal/stores/blobstore"
 )
+
+// maxListContainersResults mirrors Azure's default and ceiling for the
+// maxresults parameter of List Containers.
+const maxListContainersResults = 5000
 
 func (s *Store) CreateContainer(acct, name string, metadata map[string]string) (blobstore.ContainerInfo, error) {
 	s.mu.Lock()
@@ -60,22 +65,56 @@ func (s *Store) GetContainer(acct, name string) (blobstore.ContainerInfo, error)
 	return info, nil
 }
 
-func (s *Store) ListContainers(acct, prefix string) ([]blobstore.ContainerInfo, error) {
+func (s *Store) ListContainers(acct, prefix string, maxResults int, marker string) ([]blobstore.ContainerInfo, string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if maxResults <= 0 || maxResults > maxListContainersResults {
+		maxResults = maxListContainersResults
+	}
 	a, ok := s.accounts[acct]
 	if !ok {
-		return nil, nil
+		return nil, "", nil
 	}
-	var out []blobstore.ContainerInfo
+	var all []blobstore.ContainerInfo
 	for name, c := range a.containers {
 		if prefix != "" && !strings.HasPrefix(name, prefix) {
 			continue
 		}
 		info := c.info
 		info.Metadata = cloneMeta(c.info.Metadata)
+		all = append(all, info)
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].Name < all[j].Name })
+
+	// marker is the base64url of the container name to resume AFTER; a malformed
+	// marker decodes to empty, restarting from the beginning.
+	after := decodeContainerMarker(marker)
+	var out []blobstore.ContainerInfo
+	var nextMarker string
+	for _, info := range all {
+		if after != "" && info.Name <= after {
+			continue
+		}
+		if len(out) == maxResults {
+			nextMarker = encodeContainerMarker(out[len(out)-1].Name)
+			break
+		}
 		out = append(out, info)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
+	return out, nextMarker, nil
+}
+
+func encodeContainerMarker(name string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(name))
+}
+
+func decodeContainerMarker(marker string) string {
+	if marker == "" {
+		return ""
+	}
+	b, err := base64.RawURLEncoding.DecodeString(marker)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

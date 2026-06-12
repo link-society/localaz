@@ -68,11 +68,13 @@ func (s *Server) getContainerProperties(w http.ResponseWriter, r *http.Request, 
 
 func (s *Server) listContainers(w http.ResponseWriter, r *http.Request, req request, q queryValues) {
 	prefix := q.Get("prefix")
-	items, err := s.store.ListContainers(req.account, prefix)
+	marker := q.Get("marker")
+	maxResults, _ := strconv.Atoi(q.Get("maxresults"))
+	items, nextMarker, err := s.store.ListContainers(req.account, prefix, maxResults, marker)
 	if s.mapStoreErr(w, r, err) {
 		return
 	}
-	body, err := marshalContainers(s.serviceEndpoint(r, req.account), prefix, items)
+	body, err := marshalContainers(s.serviceEndpoint(r, req.account), prefix, marker, maxResults, items, nextMarker)
 	if err != nil {
 		s.writeError(w, r, azerr.Internal(err.Error()))
 		return

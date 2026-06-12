@@ -15,6 +15,8 @@ type enumContainersResult struct {
 	XMLName         xml.Name      `xml:"EnumerationResults"`
 	ServiceEndpoint string        `xml:"ServiceEndpoint,attr"`
 	Prefix          string        `xml:"Prefix,omitempty"`
+	Marker          string        `xml:"Marker,omitempty"`
+	MaxResults      int           `xml:"MaxResults,omitempty"`
 	Containers      xmlContainers `xml:"Containers"`
 	NextMarker      string        `xml:"NextMarker"`
 }
@@ -35,8 +37,14 @@ type xmlContainerProps struct {
 	LeaseState   string `xml:"LeaseState"`
 }
 
-func marshalContainers(endpoint, prefix string, items []blobstore.ContainerInfo) ([]byte, error) {
-	res := enumContainersResult{ServiceEndpoint: endpoint, Prefix: prefix}
+func marshalContainers(endpoint, prefix, marker string, maxResults int, items []blobstore.ContainerInfo, nextMarker string) ([]byte, error) {
+	res := enumContainersResult{
+		ServiceEndpoint: endpoint,
+		Prefix:          prefix,
+		Marker:          marker,
+		MaxResults:      maxResults,
+		NextMarker:      nextMarker,
+	}
 	for _, c := range items {
 		res.Containers.Items = append(res.Containers.Items, xmlContainer{
 			Name: c.Name,

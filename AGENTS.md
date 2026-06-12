@@ -267,8 +267,17 @@ same image.
   (`<BlobPrefix>`) counts toward `maxresults` the same as a blob. The
   `blobstore.Store` interface signature is
   `ListBlobs(account, container, prefix, delimiter string, maxResults int, marker string) (blobs []BlobInfo, prefixes []string, nextMarker string, err error)`.
-  (List **Containers** pagination is still out of scope — it returns the full set
-  with an empty `<NextMarker>`.)
+- **List Containers pagination.** List Containers honors `maxresults` (default
+  and cap 5000; `<=0` clamps to 5000) and an opaque `marker` continuation token,
+  returning a `NextMarker` when more containers remain (empty on the last page).
+  `fsstore` sorts containers lexicographically by name, treats `marker` as the
+  base64url (`base64.RawURLEncoding`) of the container name to resume *after*
+  (a malformed marker decodes to empty, restarting from the beginning), and
+  emits `NextMarker` as the base64url token for the next page. The
+  `blobstore.Store` interface reflects this:
+  `ListContainers(account, prefix string, maxResults int, marker string) (containers []ContainerInfo, nextMarker string, err error)`.
+  The `EnumerationResults` XML echoes the request `Marker`/`MaxResults` and
+  renders the returned `NextMarker`, matching Azure's element order.
 
 ## Control plane (AAD + ARM) gotchas
 
