@@ -170,7 +170,13 @@ same image.
   entity to exist, and a weak ETag enforces optimistic concurrency.
 - **Table `$filter` is a documented subset.** Only `eq`/`ne`/`gt`/`ge`/`lt`/`le`
   over string/number/bool literals combined with `and`/`or` and parentheses are
-  supported — no OData functions, typed literals, or continuation tokens.
+  supported — no OData functions, typed literals, or continuation tokens. The
+  recursive-descent parser caps parenthesis nesting at `maxFilterDepth` (64) so
+  attacker-supplied deeply nested `(` cannot overflow the goroutine stack; input
+  past the limit returns `errFilter`. The `$filter` and KQL parsers now have
+  direct in-package unit tests (`internal/servers/tableserver/filter_*_test.go`
+  and `internal/servers/monitorserver/{kql,predicate}_test.go`), driven through
+  their public entry points (`parseFilter`, `evalKQL`).
 - **Docker `/data` permissions.** The runtime image is distroless `nonroot`
   (uid 65532). The Dockerfile creates `/data` in the build stage and copies it
   with `--chown=65532:65532` so the non-root user can write to it.
