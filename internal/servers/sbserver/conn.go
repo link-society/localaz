@@ -121,10 +121,10 @@ func (c *conn) dispatch(f *frame) error {
 
 func (c *conn) onOpen(f *frame) error {
 	return c.writeAMQP(0, descOpen, []any{
-		"localaz",         // container-id
-		nil,               // hostname
-		uint32(1024 * 64), // max-frame-size
-		uint16(65535),     // channel-max
+		"localaz",            // container-id
+		nil,                  // hostname
+		uint32(maxFrameSize), // max-frame-size
+		uint16(65535),        // channel-max
 	}, nil)
 }
 

@@ -41,6 +41,16 @@ const (
 	frameTypeSASL = 0x01
 )
 
+// maxFrameSize is the largest frame the server accepts. It is advertised to the
+// client as max-frame-size in the open performative (see conn.onOpen) and
+// enforced in readFrame so a crafted size field cannot trigger a huge body
+// allocation.
+const maxFrameSize = 1024 * 64
+
+// errFrameTooLarge is returned when a frame header advertises a size beyond
+// maxFrameSize, before any body allocation.
+var errFrameTooLarge = errors.New("amqp: frame size exceeds max-frame-size")
+
 // Protocol header preambles exchanged before framing begins.
 var (
 	amqpHeader = []byte{'A', 'M', 'Q', 'P', 0x00, 0x01, 0x00, 0x00}
@@ -78,6 +88,9 @@ func readFrame(r io.Reader) (*frame, error) {
 	size := binary.BigEndian.Uint32(header[0:4])
 	if size < 8 {
 		return nil, fmt.Errorf("amqp: invalid frame size %d", size)
+	}
+	if size > maxFrameSize {
+		return nil, fmt.Errorf("%w: %d > %d", errFrameTooLarge, size, maxFrameSize)
 	}
 	doff := int(header[4]) * 4
 	if doff < 8 {
