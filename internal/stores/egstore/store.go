@@ -7,18 +7,34 @@ package egstore
 import (
 	"encoding/json"
 	"sync"
+	"time"
 )
+
+// defaultLockDuration is how long a Receive holds an event under its lock token
+// before the lock expires and the event becomes eligible for redelivery. It
+// mirrors the Event Grid pull-delivery default visibility window.
+const defaultLockDuration = 5 * time.Minute
 
 // Store holds all Event Grid topics for a single namespace. It is safe for
 // concurrent use.
 type Store struct {
 	mu     sync.Mutex
 	topics map[string]*topic
+
+	// now is the clock used for lock deadlines; injectable for tests.
+	now func() time.Time
+	// lockDuration is how long a locked delivery is held before its lock
+	// expires and it is returned to the available queue for redelivery.
+	lockDuration time.Duration
 }
 
 // New constructs an empty Store.
 func New() *Store {
-	return &Store{topics: make(map[string]*topic)}
+	return &Store{
+		topics:       make(map[string]*topic),
+		now:          func() time.Time { return time.Now().UTC() },
+		lockDuration: defaultLockDuration,
+	}
 }
 
 // getTopic returns the named topic, creating it on first reference.
@@ -59,11 +75,15 @@ func (s *Store) Receive(topicName, subName string, max int) []Received {
 		max = 1
 	}
 
+	now := s.now()
+	s.sweepExpired(sub, now)
+
 	out := make([]Received, 0, max)
 	for len(out) < max && len(sub.available) > 0 {
 		d := sub.available[0]
 		sub.available = sub.available[1:]
 		d.deliveryCount++
+		d.lockDeadline = now.Add(s.lockDuration)
 		token := newLockToken()
 		sub.locked[token] = d
 		out = append(out, Received{
@@ -94,16 +114,19 @@ func (s *Store) Release(topicName, subName string, tokens []string) LockResult {
 	})
 }
 
-// RenewLocks keeps the lock on the events. Since the emulator does not expire
-// locks, this is a validation-only no-op that fails unknown tokens.
+// RenewLocks extends each lock's deadline by lockDuration from now, keeping the
+// events locked past their original expiry. Unknown tokens are reported as
+// failed.
 func (s *Store) RenewLocks(topicName, subName string, tokens []string) LockResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sub := s.getTopic(topicName).getSub(subName)
+	deadline := s.now().Add(s.lockDuration)
 	var res LockResult
 	for _, tok := range tokens {
-		if _, ok := sub.locked[tok]; ok {
+		if d, ok := sub.locked[tok]; ok {
+			d.lockDeadline = deadline
 			res.Succeeded = append(res.Succeeded, tok)
 		} else {
 			res.Failed = append(res.Failed, tok)
@@ -131,4 +154,18 @@ func (s *Store) resolve(topicName, subName string, tokens []string, onRemove fun
 		res.Succeeded = append(res.Succeeded, tok)
 	}
 	return res
+}
+
+// sweepExpired returns every locked delivery whose lock deadline has passed to
+// the subscription's available queue, freeing strands left by consumers that
+// received but never acknowledged or released. Called lazily on Receive so no
+// background goroutine is needed.
+func (s *Store) sweepExpired(sub *subscription, now time.Time) {
+	for tok, d := range sub.locked {
+		if now.After(d.lockDeadline) {
+			delete(sub.locked, tok)
+			d.lockDeadline = time.Time{}
+			sub.available = append(sub.available, d)
+		}
+	}
 }
