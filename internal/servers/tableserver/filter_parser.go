@@ -5,10 +5,16 @@ import (
 	"strconv"
 )
 
+// maxFilterDepth bounds how deeply parsePrimary may recurse through nested
+// parentheses. Without it, attacker-supplied input with thousands of nested
+// '(' overflows the goroutine stack (an unrecoverable fatal error).
+const maxFilterDepth = 64
+
 // filterParser is a recursive-descent parser over the token stream.
 type filterParser struct {
 	tokens []token
 	pos    int
+	depth  int
 }
 
 func (p *filterParser) peek() (token, bool) {
@@ -72,10 +78,15 @@ func (p *filterParser) parsePrimary() (filterFunc, error) {
 		return nil, errFilter
 	}
 	if t.kind == tokLParen {
+		p.depth++
+		if p.depth > maxFilterDepth {
+			return nil, errFilter
+		}
 		fn, err := p.parseOr()
 		if err != nil {
 			return nil, err
 		}
+		p.depth--
 		closing, ok := p.next()
 		if !ok || closing.kind != tokRParen {
 			return nil, errFilter
