@@ -5,13 +5,15 @@
 //
 // The authority is exposed in ADFS shape (a literal "adfs" tenant segment),
 // which is the one mode where MSAL skips public instance discovery and talks
-// only to the configured authority. Tokens are signed with a per-process RSA
-// key published via JWKS, but their claims are synthetic: like every localaz
-// service, sign-in is emulated, not verified.
+// only to the configured authority. Tokens are signed with an RSA key
+// published via JWKS — persisted under the data dir so its kid is stable across
+// restarts — but their claims are synthetic: like every localaz service,
+// sign-in is emulated, not verified.
 package aadserver
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,9 +23,20 @@ type Server struct {
 	signer *signer
 }
 
-// New constructs a Server with a freshly generated signing key.
-func New() (*Server, error) {
-	s, err := newSigner()
+// New constructs a Server. When dataDir is non-empty the RSA signing key is
+// loaded from (or persisted to) <dataDir>/aad/signing-key.pem so its kid stays
+// stable across restarts and tokens minted before a restart keep verifying.
+// With an empty dataDir a fresh, ephemeral key is generated instead.
+func New(dataDir string) (*Server, error) {
+	var (
+		s   *signer
+		err error
+	)
+	if dataDir != "" {
+		s, err = signerFromFileOrNew(filepath.Join(dataDir, "aad", "signing-key.pem"))
+	} else {
+		s, err = newSigner()
+	}
 	if err != nil {
 		return nil, err
 	}

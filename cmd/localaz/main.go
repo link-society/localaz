@@ -67,7 +67,7 @@ func main() {
 	fatal(logger, "init queue store", err)
 	tableStore, err := tablestore.New(*dataDir)
 	fatal(logger, "init table store", err)
-	aadServer, err := aadserver.New()
+	aadServer, err := aadserver.New(*dataDir)
 	fatal(logger, "init aad server", err)
 
 	scheme := "http"

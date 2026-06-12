@@ -85,7 +85,7 @@ func (fakeCredential) GetToken(context.Context, policy.TokenRequestOptions) (azc
 // to send credentials over plain HTTP) and returns the test server.
 func newAAD(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv, err := aadserver.New()
+	srv, err := aadserver.New("")
 	if err != nil {
 		t.Fatalf("create aad server: %v", err)
 	}
