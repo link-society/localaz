@@ -2,6 +2,7 @@ package armserver
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 
@@ -72,9 +73,14 @@ func (s *Server) handleProviderItem(w http.ResponseWriter, r *http.Request, segm
 	id := "/" + strings.Join(segments, "/")
 	switch r.Method {
 	case http.MethodPut:
+		// Cap the request body: the resource is stored verbatim in memory, so
+		// an unbounded body is a memory-exhaustion vector.
 		body := map[string]any{}
 		if r.Body != nil {
-			_ = json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil && err != io.EOF {
+				httpx.WriteError(w, http.StatusBadRequest, "InvalidRequestBody", "request body could not be read or exceeds the size limit")
+				return
+			}
 		}
 		body["id"] = id
 		body["name"] = name
@@ -91,7 +97,12 @@ func (s *Server) handleProviderItem(w http.ResponseWriter, r *http.Request, segm
 		}
 		body["properties"] = props
 
-		s.store.PutResource(id, body)
+		// The store caps the number of distinct resources to bound memory; a
+		// refused store surfaces as 409 rather than silently succeeding.
+		if !s.store.PutResource(id, body) {
+			httpx.WriteError(w, http.StatusConflict, "ResourceLimitExceeded", "the resource store is full")
+			return
+		}
 		httpx.WriteJSON(w, http.StatusOK, body)
 	case http.MethodGet:
 		res, ok := s.store.GetResource(id)
@@ -101,7 +112,10 @@ func (s *Server) handleProviderItem(w http.ResponseWriter, r *http.Request, segm
 		}
 		httpx.WriteJSON(w, http.StatusOK, res)
 	case http.MethodDelete:
-		s.store.DeleteResource(id)
+		if !s.store.DeleteResource(id) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	default:
 		httpx.WriteError(w, http.StatusMethodNotAllowed, "MethodNotAllowed", "unsupported method")

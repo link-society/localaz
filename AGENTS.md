@@ -211,6 +211,16 @@ same image.
   and auto-creates entities on first data-plane use, so the RP does not
   pre-provision them. To learn the exact paths a new CLI command needs, run the
   emulator with request logging and watch the `service=arm` log lines.
+- **ARM provider state is bounded.** Provider PUT bodies are size-limited via
+  `http.MaxBytesReader` (1 MiB); an oversized body is rejected with 400 instead
+  of being decoded. `armstore` caps distinct generic resources at
+  `maxResources` (10000): `PutResource` returns `false` for a new ID once the
+  cap is hit (replacing an existing ID is always allowed), and the handler
+  surfaces that as 409. This keeps a PUT loop with distinct IDs from exhausting
+  the in-memory store.
+- **Resource DELETE returns 204 when absent.** `handleProviderItem` mirrors the
+  resource-group handler: DELETE of an existing resource ⇒ 200, DELETE of an
+  absent one ⇒ 204 (it no longer always returns 200).
 - **The cli control-plane test isolates `AZURE_CONFIG_DIR`** to a temp dir so it
   never touches the developer's real clouds/logins, but points
   `AZURE_EXTENSION_DIR` at the real extension dir for the `log-analytics`

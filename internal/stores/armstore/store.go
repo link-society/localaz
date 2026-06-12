@@ -101,12 +101,25 @@ func (s *Store) DeleteResourceGroup(name string) bool {
 	return true
 }
 
+// maxResources caps the number of distinct generic provider resources the
+// store will hold. The emulator keeps everything in memory, so without a bound
+// a client looping PUTs with distinct IDs could exhaust memory. Replacing an
+// already-stored ID is always allowed; only new IDs are refused once the cap is
+// reached.
+const maxResources = 10000
+
 // PutResource stores a generic provider resource keyed by its (case-insensitive)
-// ARM resource ID, replacing any existing record.
-func (s *Store) PutResource(id string, body map[string]any) {
+// ARM resource ID, replacing any existing record. It reports false (and stores
+// nothing) when storing a new ID would exceed maxResources.
+func (s *Store) PutResource(id string, body map[string]any) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.resources[strings.ToLower(id)] = body
+	key := strings.ToLower(id)
+	if _, exists := s.resources[key]; !exists && len(s.resources) >= maxResources {
+		return false
+	}
+	s.resources[key] = body
+	return true
 }
 
 // GetResource returns a stored provider resource by ID.
