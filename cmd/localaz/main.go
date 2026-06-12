@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"localaz.dev/internal/utils/devcert"
 	"localaz.dev/internal/servers/aadserver"
 	"localaz.dev/internal/servers/armserver"
 	"localaz.dev/internal/servers/blobserver"
@@ -36,6 +35,7 @@ import (
 	"localaz.dev/internal/stores/queuestore"
 	"localaz.dev/internal/stores/sbstore"
 	"localaz.dev/internal/stores/tablestore"
+	"localaz.dev/internal/utils/devcert"
 )
 
 func main() {
