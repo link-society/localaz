@@ -289,6 +289,13 @@ same image.
   `ListContainers(account, prefix string, maxResults int, marker string) (containers []ContainerInfo, nextMarker string, err error)`.
   The `EnumerationResults` XML echoes the request `Marker`/`MaxResults` and
   renders the returned `NextMarker`, matching Azure's element order.
+- **Access-log middleware recovers panics.** `logRequests` (`cmd/localaz`) wraps
+  every service handler. It now recovers a panic from the handler, logs it via
+  slog at Error level (method, path, recovered value), and — if the handler had
+  not written a header yet — returns a `500`. It wraps the `ResponseWriter` in a
+  small `statusRecorder` to track whether a header was written and to log the
+  status code. So a single handler panic can no longer drop the request without
+  a response.
 
 ## Control plane (AAD + ARM) gotchas
 
