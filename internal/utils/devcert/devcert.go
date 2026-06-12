@@ -20,8 +20,11 @@ import (
 )
 
 // Generate produces a self-signed certificate valid for localhost and the
-// loopback addresses. It returns the PEM-encoded certificate and private key.
-func Generate() (certPEM, keyPEM []byte, err error) {
+// loopback addresses, plus any additional hosts supplied. Each host is parsed:
+// IP literals are added to the SAN IP addresses, everything else to the DNS
+// names. Empty and duplicate hosts are skipped. It returns the PEM-encoded
+// certificate and private key.
+func Generate(hosts ...string) (certPEM, keyPEM []byte, err error) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate key: %w", err)
@@ -30,6 +33,23 @@ func Generate() (certPEM, keyPEM []byte, err error) {
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate serial: %w", err)
+	}
+
+	dnsNames := []string{"localhost"}
+	ipAddresses := []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}
+	for _, host := range hosts {
+		if host == "" {
+			continue
+		}
+		if ip := net.ParseIP(host); ip != nil {
+			if !containsIP(ipAddresses, ip) {
+				ipAddresses = append(ipAddresses, ip)
+			}
+			continue
+		}
+		if !containsString(dnsNames, host) {
+			dnsNames = append(dnsNames, host)
+		}
 	}
 
 	template := x509.Certificate{
@@ -41,8 +61,8 @@ func Generate() (certPEM, keyPEM []byte, err error) {
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-		DNSNames:              []string{"localhost"},
-		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		DNSNames:              dnsNames,
+		IPAddresses:           ipAddresses,
 	}
 
 	der, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
@@ -58,4 +78,22 @@ func Generate() (certPEM, keyPEM []byte, err error) {
 	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	return certPEM, keyPEM, nil
+}
+
+func containsString(s []string, v string) bool {
+	for _, got := range s {
+		if got == v {
+			return true
+		}
+	}
+	return false
+}
+
+func containsIP(s []net.IP, v net.IP) bool {
+	for _, got := range s {
+		if got.Equal(v) {
+			return true
+		}
+	}
+	return false
 }

@@ -59,7 +59,7 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
-	tlsCert, err := loadTLS(logger, *dataDir, *tlsCertFile, *tlsKeyFile, *tlsAuto)
+	tlsCert, err := loadTLS(logger, *dataDir, *tlsCertFile, *tlsKeyFile, *tlsAuto, *advertiseHost)
 	fatal(logger, "init tls", err)
 	blobStore, err := fsstore.New(*dataDir)
 	fatal(logger, "init blob store", err)
@@ -201,9 +201,10 @@ func fatal(logger *slog.Logger, what string, err error) {
 
 // loadTLS resolves the certificate used by the bearer/control-plane services.
 // An explicit cert/key pair wins; otherwise -tls-auto generates a throwaway
-// self-signed certificate and writes its PEM under <data>/tls so clients can
-// trust it (for example via REQUESTS_CA_BUNDLE). Returns nil when TLS is off.
-func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, auto bool) (*tls.Certificate, error) {
+// self-signed certificate (with advertiseHost added to its SANs) and writes its
+// PEM under <data>/tls so clients can trust it (for example via
+// REQUESTS_CA_BUNDLE). Returns nil when TLS is off.
+func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, auto bool, advertiseHost string) (*tls.Certificate, error) {
 	if certFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
@@ -215,7 +216,7 @@ func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, auto bool) 
 		return nil, nil
 	}
 
-	certPEM, keyPEM, err := devcert.Generate()
+	certPEM, keyPEM, err := devcert.Generate(advertiseHost)
 	if err != nil {
 		return nil, err
 	}
@@ -230,7 +231,7 @@ func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, auto bool) 
 	}
 	certPath := filepath.Join(tlsDir, "localaz.crt")
 	keyPath := filepath.Join(tlsDir, "localaz.key")
-	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
 		return nil, fmt.Errorf("write certificate: %w", err)
 	}
 	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
