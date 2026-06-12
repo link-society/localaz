@@ -13,11 +13,10 @@ type container struct {
 	blobs map[string]*blobEntry
 }
 
-// blobEntry is the in-memory record for a single blob, including any staged but
-// uncommitted blocks.
+// blobEntry is the in-memory record for a single blob. Staged but uncommitted
+// blocks live on disk under the container's blocks/ directory, not in memory.
 type blobEntry struct {
-	info   blobstore.BlobInfo
-	blocks map[string][]byte // staged blocks, keyed by block id
+	info blobstore.BlobInfo
 }
 
 // On-disk layout constants.

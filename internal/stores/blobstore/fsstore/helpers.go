@@ -1,9 +1,43 @@
 package fsstore
 
 import (
+	"crypto/md5"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"time"
 )
+
+// streamToFile copies src into a freshly created temp file alongside dst,
+// computing the MD5 digest and byte count of the data as it streams, then
+// atomically renames the temp file onto dst. The payload is never buffered in
+// memory. The parent directory of dst must already exist.
+func streamToFile(dst string, src io.Reader) (sum []byte, n int64, err error) {
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".tmp-*")
+	if err != nil {
+		return nil, 0, err
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
+		}
+	}()
+	h := md5.New()
+	n, err = io.Copy(io.MultiWriter(tmp, h), src)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err = tmp.Close(); err != nil {
+		return nil, 0, err
+	}
+	if err = os.Rename(tmpName, dst); err != nil {
+		return nil, 0, err
+	}
+	return h.Sum(nil), n, nil
+}
 
 // newETag derives an Azure-style ETag from a modification timestamp.
 func newETag(t time.Time) string {

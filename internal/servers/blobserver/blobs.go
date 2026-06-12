@@ -40,16 +40,11 @@ func (s *Server) putBlob(w http.ResponseWriter, r *http.Request, req request) {
 			fmt.Sprintf("Blob type %q is not supported by the emulator.", bt)))
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, maxBlobBytes))
-	if err != nil {
-		s.writeError(w, r, azerr.Internal(err.Error()))
-		return
-	}
 	props := readBlobProps(r.Header)
-	sum := md5.Sum(data)
-	props.ContentMD5 = sum[:]
-
-	info, err := s.store.PutBlob(req.account, req.container, req.blob, data, props)
+	// Stream the body straight to the store, keeping the 5 GiB cap as
+	// defense-in-depth. The store computes the payload MD5 + byte count.
+	info, err := s.store.PutBlob(req.account, req.container, req.blob,
+		io.LimitReader(r.Body, maxBlobBytes), props)
 	if s.mapStoreErr(w, r, err) {
 		return
 	}
@@ -61,10 +56,11 @@ func (s *Server) putBlob(w http.ResponseWriter, r *http.Request, req request) {
 }
 
 func (s *Server) getBlob(w http.ResponseWriter, r *http.Request, req request, headOnly bool) {
-	data, info, err := s.store.GetBlob(req.account, req.container, req.blob)
+	body, info, err := s.store.GetBlob(req.account, req.container, req.blob)
 	if s.mapStoreErr(w, r, err) {
 		return
 	}
+	defer body.Close()
 
 	ct := info.Props.ContentType
 	if ct == "" {
@@ -100,13 +96,15 @@ func (s *Server) getBlob(w http.ResponseWriter, r *http.Request, req request, he
 	if rangeHeader == "" {
 		rangeHeader = r.Header.Get("Range")
 	}
-	start, end, ok := parseRange(rangeHeader, int64(len(data)))
+	start, end, ok := parseRange(rangeHeader, info.ContentLength)
 	if ok {
-		h.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(data)))
+		h.Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, info.ContentLength))
 		h.Set("Content-Length", strconv.FormatInt(end-start+1, 10))
 		w.WriteHeader(http.StatusPartialContent)
 		if !headOnly {
-			_, _ = w.Write(data[start : end+1])
+			if _, err := io.CopyN(io.Discard, body, start); err == nil {
+				_, _ = io.CopyN(w, body, end-start+1)
+			}
 		}
 		return
 	}
@@ -114,7 +112,7 @@ func (s *Server) getBlob(w http.ResponseWriter, r *http.Request, req request, he
 	h.Set("Content-Length", strconv.FormatInt(info.ContentLength, 10))
 	w.WriteHeader(http.StatusOK)
 	if !headOnly {
-		_, _ = w.Write(data)
+		_, _ = io.Copy(w, body)
 	}
 }
 
@@ -133,18 +131,16 @@ func (s *Server) putBlock(w http.ResponseWriter, r *http.Request, req request, q
 			"blockid is required for Put Block."))
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(r.Body, maxBlobBytes))
-	if err != nil {
-		s.writeError(w, r, azerr.Internal(err.Error()))
-		return
-	}
-	if err := s.store.StageBlock(req.account, req.container, req.blob, blockID, data); err != nil {
+	// Stream the block to the store, keeping the 5 GiB cap as defense-in-depth
+	// and computing the block MD5 for the response header as the body flows by.
+	h := md5.New()
+	reader := io.TeeReader(io.LimitReader(r.Body, maxBlobBytes), h)
+	if err := s.store.StageBlock(req.account, req.container, req.blob, blockID, reader); err != nil {
 		if s.mapStoreErr(w, r, err) {
 			return
 		}
 	}
-	sum := md5.Sum(data)
-	w.Header().Set("Content-MD5", base64MD5(sum[:]))
+	w.Header().Set("Content-MD5", base64MD5(h.Sum(nil)))
 	w.Header().Set("x-ms-request-server-encrypted", "true")
 	w.WriteHeader(http.StatusCreated)
 }
