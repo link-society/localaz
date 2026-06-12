@@ -158,6 +158,17 @@ same image.
   dropped (`closeNow`) rather than slowing the producer. Inbound frames are
   size-limited via `SetReadLimit` (1 MiB). The socket is accessed through the
   `wsSocket` interface so it can be stubbed in tests.
+  could trigger an unauthenticated multi-GB allocation / OOM. **Sender credit is
+  replenished** as transfers are consumed: on attach the server grants
+  `senderInitialCredit` (`link.go`), and `onTransfer` re-grants a flow every
+  `senderCreditReplenishThreshold` transfers with `delivery-count` = received
+  count and `link-credit` = `senderInitialCredit`, so the go-amqp client's window
+  returns to its initial size and never stalls after the first window. **Multi-frame
+  transfers are reassembled** by `(channel, handle)`: `onTransfer` buffers the
+  partial body while the transfer `more` flag (performative field 5) is true and
+  only relays the message to the broker and settles once, on the final frame
+  (`more` false/absent) — otherwise a body split across frames (large messages or
+  a small max-frame-size) would be delivered as several corrupted fragments.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
   Monitor Logs do not persist — their traffic is transient, so there is no
   `/data` format for them. The AAD/ARM control plane is in-memory too (one
