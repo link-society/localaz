@@ -126,7 +126,9 @@ func (p *filterParser) comparison(field, op string, valTok token) (filterFunc, e
 	return func(props map[string]json.RawMessage) bool {
 		actual, ok := propValue(props, field)
 		if !ok {
-			return op == "ne"
+			// Absent property: a $filter selects only entities that have the
+			// property and satisfy it, so no operator matches (including ne).
+			return false
 		}
 		return compare(op, actual, literal)
 	}, nil

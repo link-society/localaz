@@ -183,7 +183,8 @@ func compare(op string, left any, right any) bool {
 			return lb != rb
 		}
 	}
-	return op == "ne"
+	// Incomparable operands (cross-type): no operator matches, including ne.
+	return false
 }
 
 func numericOp(op string, a, b float64) bool {

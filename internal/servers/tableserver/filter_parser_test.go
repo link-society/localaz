@@ -67,9 +67,19 @@ func TestParseFilterValid(t *testing.T) {
 		// so use a case that distinguishes): true or true and false.
 		{"precedence or with trailing and", "Active eq true or Age eq 99 and Name eq 'bob'", true},
 
-		// missing property: ne is true, others false (existing semantics).
-		{"missing prop ne", "Missing ne 'x'", true},
+		// missing property: a $filter selects only entities that HAVE the
+		// property and satisfy the comparison, so an absent property matches no
+		// operator — including ne.
+		{"missing prop ne", "Missing ne 'x'", false},
 		{"missing prop eq", "Missing eq 'x'", false},
+		{"missing prop gt", "Missing gt 'x'", false},
+
+		// cross-type: the property's value type is not comparable to the
+		// literal's type, so no operator matches — including ne.
+		{"cross-type number prop string literal ne", "Age ne 'foo'", false},
+		{"cross-type number prop string literal eq", "Age eq 'foo'", false},
+		{"cross-type string prop number literal ne", "Name ne 5", false},
+		{"cross-type string prop number literal eq", "Name eq 5", false},
 	}
 
 	for _, tc := range cases {
