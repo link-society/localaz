@@ -184,6 +184,13 @@ same image.
   send bearer tokens over plain HTTP, so AAD/ARM/Monitor must serve HTTPS. Use
   `-tls-auto` (writes `<data>/tls/localaz.{crt,key}`) or supply
   `-tls-cert`/`-tls-key`. `http://` authorities are rejected outright by MSAL.
+- **Auto cert SANs include `-advertise-host`.** `devcert.Generate(hosts...)`
+  starts from the loopback defaults (`localhost`, `127.0.0.1`, `::1`) and adds
+  the configured `-advertise-host`, so a hostname or non-loopback IP advertised
+  by ARM still validates. The generated `localaz.crt` is written `0600` (like
+  the key). `IsCA` stays `true` on purpose: clients trust this cert explicitly
+  via `REQUESTS_CA_BUNDLE`/`SSL_CERT_FILE`, and flipping the CA basic
+  constraint would break the documented az/MSAL trust flow.
 - **Sign in with `--tenant adfs`.** The ADFS authority mode makes MSAL skip
   public `login.microsoftonline.com` instance discovery and talk only to the
   configured authority — essential for offline use.
