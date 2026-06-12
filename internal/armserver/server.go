@@ -34,6 +34,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.handleTenants(w, r)
 	case lower == "subscriptions":
 		s.handleSubscriptions(w, r)
+	// Any path that names a resource provider (e.g. .../providers/Microsoft.ServiceBus/...).
+	case providerIndex(segments) >= 0:
+		s.handleProvider(w, r, segments)
 	// /subscriptions/{id}/resourcegroups[/{name}]
 	case len(segments) >= 3 && strings.EqualFold(segments[0], "subscriptions") && strings.EqualFold(segments[2], "resourcegroups"):
 		s.handleResourceGroups(w, r, segments)
@@ -43,4 +46,15 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "NotFound", "Unknown operation: "+r.URL.Path)
 	}
+}
+
+// providerIndex returns the index of the "providers" segment, or -1 when the
+// path does not address a resource provider.
+func providerIndex(segments []string) int {
+	for i, seg := range segments {
+		if strings.EqualFold(seg, "providers") {
+			return i
+		}
+	}
+	return -1
 }

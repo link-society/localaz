@@ -95,11 +95,20 @@ principal, manages a resource group, and runs `az monitor log-analytics query`
    then `az login --service-principal --tenant adfs` (the ADFS authority makes
    MSAL skip public instance discovery).
 5. Assert `az account show`, `az group create/list/delete`, seed log records
-   via the Logs Ingestion API, and assert `az monitor log-analytics query`
-   returns them.
+   via the Logs Ingestion API, and run a `MonitorLogs` table of subtests that
+   exercise the KQL subset through `az monitor log-analytics query` — string
+   and numeric `where` comparisons (`==`/`!=`/`<`/`>=`), `and`/`or`, `project`,
+   `sort`, `take` and `count`.
+6. Run a `ServiceBus` subtest that drives the `Microsoft.ServiceBus` ARM
+   resource provider through `az servicebus`: namespace create/show/list, queue
+   create/list/delete, and topic + topic-subscription create.
 
 This is exactly the flow a developer would use to point the Azure CLI at
-localaz, proven against the real CLI on every run.
+localaz, proven against the real CLI on every run. Two data planes are reachable
+through the control plane: **Monitor Logs** (`az monitor log-analytics query`)
+and the **Service Bus management plane** (`az servicebus`, via the emulated ARM
+resource provider). `az eventgrid` and `az webpubsub` would each need their own
+resource provider and data-plane wiring, so those stay SDK-only for now.
 
 For the pub/sub services the **SDK suite** above is the equivalent end-to-end
 signal: it drives the official clients against localaz over the real protocol,

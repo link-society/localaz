@@ -156,6 +156,10 @@ ANONYMOUS, CBS tokens accepted without verification).
 - Message bodies are relayed verbatim. Peek-lock delivery with disposition-based
   settlement. Topic sends fan out to registered subscriptions. State is
   in-memory.
+- The **management plane** is served by the control-plane ARM resource provider
+  (`Microsoft.ServiceBus`), so `az servicebus` namespace/queue/topic/subscription
+  commands work too; the data-plane broker auto-creates entities on first use
+  and is not pre-provisioned by ARM.
 
 ### Not yet implemented (Service Bus)
 
@@ -244,10 +248,33 @@ principal, and have data-plane commands routed to localaz. See
   `logAnalyticslogAnalyticsResourceId` index). Its `name` field must match the
   registered cloud name (`-arm-cloud-name`).
 
+### Resource providers
+
+A generic resource-provider surface backs the typed management commands. Any
+`.../providers/{namespace}/{type}/{name}` resource is stored and echoed back
+with a terminal `provisioningState`, which is enough for the CLI's
+create/show/list/delete commands to run against localaz.
+
+| Operation                 | REST surface                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| Create/replace resource   | `PUT .../providers/{ns}/{type}/{name}`                                       |
+| Get resource              | `GET .../providers/{ns}/{type}/{name}`                                       |
+| List resources            | `GET .../providers/{ns}/{type}` (subscription- or group-scoped)              |
+| Delete resource           | `DELETE .../providers/{ns}/{type}/{name}`                                    |
+| Name availability         | `POST .../providers/{ns}/checkNameAvailability`                              |
+| List keys                 | `POST .../providers/{ns}/.../authorizationRules/{rule}/listKeys`             |
+
+This is exercised end to end by `az servicebus` (`Microsoft.ServiceBus`):
+namespace, queue, topic and topic-subscription create/show/list/delete all
+resolve to localaz through the emulated Resource Manager.
+
 ### Not yet implemented (control plane)
 
 - Token signature/scope validation and RBAC; device-code/interactive logins.
-- Resource providers beyond resource groups (no VM/storage/etc. resources).
+- Long-running-operation polling (resources provision synchronously) and
+  resource-specific validation or data-plane wiring (e.g. an ARM-created Service
+  Bus queue is not pre-provisioned in the AMQP broker, which auto-creates it on
+  first use).
 - Subscription or tenant management operations.
 
 ## Roadmap

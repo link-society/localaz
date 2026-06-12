@@ -42,7 +42,7 @@ internal/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
 internal/monitorstore  in-memory Monitor Logs tables
 internal/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
 internal/armserver     Resource Manager: cloud metadata, subscriptions, groups
-internal/armstore      in-memory ARM state (one subscription/tenant + groups)
+internal/armstore      in-memory ARM state (one subscription/tenant + groups + generic resources)
 internal/devcert       self-signed TLS material for the control plane
 internal/azerr         faithful Azure error responses
 test/sdk               integration tests via the Azure Go SDKs
@@ -192,6 +192,14 @@ same image.
 - **JWTs are hand-rolled RS256** (crypto/rsa, no third-party dep) and verify
   against the published JWKS; tokens, client id and secret are accepted but
   never validated (opt-in only, like the storage Shared Key).
+- **ARM resource providers are generic.** `armserver/provider.go` stores any
+  `.../providers/{ns}/{type}/{name}` body in `armstore` and echoes it back with
+  a terminal `provisioningState=Succeeded`, which is enough for the CLI's
+  create/show/list/delete to run (no LRO polling). `Microsoft.ServiceBus` is
+  exercised end to end by `az servicebus`; the broker (`sbstore`) is separate
+  and auto-creates entities on first data-plane use, so the RP does not
+  pre-provision them. To learn the exact paths a new CLI command needs, run the
+  emulator with request logging and watch the `service=arm` log lines.
 - **The e2e control-plane test isolates `AZURE_CONFIG_DIR`** to a temp dir so it
   never touches the developer's real clouds/logins, but points
   `AZURE_EXTENSION_DIR` at the real extension dir for the `log-analytics`

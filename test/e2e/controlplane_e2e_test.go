@@ -155,17 +155,97 @@ func TestControlPlaneCLI(t *testing.T) {
 		t.Fatalf("resource group listing count after delete = %q, want 0", got)
 	}
 
-	// Seed two log records, then prove the CLI's log-analytics query resolves
-	// its data-plane host from the cloud metadata and reaches localaz.
+	// Seed a handful of log records, then prove the CLI's log-analytics query
+	// resolves its data-plane host from the cloud metadata, reaches localaz, and
+	// that the emulator's KQL subset behaves as documented through the real CLI.
 	seedLogs(t, client, monitorURL)
 
 	const workspace = "33333333-3333-3333-3333-333333333333"
-	if got := az(t, "monitor", "log-analytics", "query",
-		"-w", workspace,
-		"--analytics-query", "AppLogs_CL | where Level == 'error'",
-		"--query", "[0].Message", "-o", "tsv"); got != "boom" {
-		t.Fatalf("log-analytics query message = %q, want boom", got)
+	logQuery := func(t *testing.T, kql, jmesPath string) string {
+		t.Helper()
+		return az(t, "monitor", "log-analytics", "query",
+			"-w", workspace,
+			"--analytics-query", kql,
+			"--query", jmesPath, "-o", "tsv")
 	}
+
+	// Each case drives one KQL pipeline through `az monitor log-analytics query`
+	// and reads a value back with a JMESPath --query, covering the where
+	// operators (string/number, ==/!=/</>=), and/or, project, sort, take and
+	// count stages.
+	t.Run("MonitorLogs", func(t *testing.T) {
+		cases := []struct {
+			name string
+			kql  string
+			jmes string
+			want string
+		}{
+			{"WhereStringEq", "AppLogs_CL | where Level == 'error'", "length(@)", "2"},
+			{"WhereStringNe", "AppLogs_CL | where Level != 'info'", "length(@)", "3"},
+			{"WhereAnd", "AppLogs_CL | where Level == 'error' and Source == 'worker'", "[0].Message", "kaput"},
+			{"WhereOr", "AppLogs_CL | where Level == 'warning' or Level == 'error'", "length(@)", "3"},
+			{"WhereNumericGe", "AppLogs_CL | where Code >= 500", "length(@)", "2"},
+			{"WhereNumericLt", "AppLogs_CL | where Code < 300", "length(@)", "2"},
+			{"SortProjectTake", "AppLogs_CL | sort by Code desc | project Message | take 1", "[0].Message", "kaput"},
+			{"Take", "AppLogs_CL | take 2", "length(@)", "2"},
+			{"Count", "AppLogs_CL | count", "[0].Count", "5"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				if got := logQuery(t, tc.kql, tc.jmes); got != tc.want {
+					t.Fatalf("query %q [%s] = %q, want %q", tc.kql, tc.jmes, got, tc.want)
+				}
+			})
+		}
+	})
+
+	// Drive the Microsoft.ServiceBus ARM resource provider through the real
+	// CLI: namespace, queue and topic/subscription management resolve to
+	// localaz because the CLI talks to the emulated Resource Manager.
+	t.Run("ServiceBus", func(t *testing.T) {
+		const sbRG = "sb-e2e-rg"
+		az(t, "group", "create", "-n", sbRG, "-l", "localaz", "--output", "none")
+		t.Cleanup(func() {
+			az(t, "group", "delete", "-n", sbRG, "-y", "--output", "none")
+		})
+
+		ns := fmt.Sprintf("sbe2e%d", time.Now().UnixNano())
+		if got := az(t, "servicebus", "namespace", "create",
+			"-g", sbRG, "-n", ns, "-l", "localaz", "--sku", "Standard",
+			"--query", "provisioningState", "-o", "tsv"); got != "Succeeded" {
+			t.Fatalf("namespace provisioningState = %q, want Succeeded", got)
+		}
+		if got := az(t, "servicebus", "namespace", "show",
+			"-g", sbRG, "-n", ns, "--query", "name", "-o", "tsv"); got != ns {
+			t.Fatalf("namespace show name = %q, want %q", got, ns)
+		}
+		if got := az(t, "servicebus", "namespace", "list",
+			"-g", sbRG, "--query", "length(@)", "-o", "tsv"); got != "1" {
+			t.Fatalf("namespace list count = %q, want 1", got)
+		}
+
+		az(t, "servicebus", "queue", "create",
+			"-g", sbRG, "--namespace-name", ns, "-n", "q1", "--output", "none")
+		if got := az(t, "servicebus", "queue", "list",
+			"-g", sbRG, "--namespace-name", ns, "--query", "length(@)", "-o", "tsv"); got != "1" {
+			t.Fatalf("queue list count = %q, want 1", got)
+		}
+
+		az(t, "servicebus", "topic", "create",
+			"-g", sbRG, "--namespace-name", ns, "-n", "t1", "--output", "none")
+		if got := az(t, "servicebus", "topic", "subscription", "create",
+			"-g", sbRG, "--namespace-name", ns, "--topic-name", "t1", "-n", "s1",
+			"--query", "name", "-o", "tsv"); got != "s1" {
+			t.Fatalf("topic subscription name = %q, want s1", got)
+		}
+
+		az(t, "servicebus", "queue", "delete",
+			"-g", sbRG, "--namespace-name", ns, "-n", "q1", "--output", "none")
+		if got := az(t, "servicebus", "queue", "list",
+			"-g", sbRG, "--namespace-name", ns, "--query", "length(@)", "-o", "tsv"); got != "0" {
+			t.Fatalf("queue list count after delete = %q, want 0", got)
+		}
+	})
 }
 
 // mustFreeAddr reserves a loopback address with a free port.
@@ -221,11 +301,18 @@ func waitForReadyClient(client *http.Client, url string) error {
 	return fmt.Errorf("endpoint did not become ready: %s", url)
 }
 
-// seedLogs ingests a couple of records into the AppLogs_CL custom table through
-// the Logs Ingestion API.
+// seedLogs ingests a few records into the AppLogs_CL custom table through the
+// Logs Ingestion API, giving the KQL subtests a dataset with both string and
+// numeric columns to filter, sort and count over.
 func seedLogs(t *testing.T, client *http.Client, monitorURL string) {
 	t.Helper()
-	body := []byte(`[{"Level":"info","Message":"hi"},{"Level":"error","Message":"boom"}]`)
+	body := []byte(`[` +
+		`{"Level":"info","Message":"hi","Code":200,"Source":"api"},` +
+		`{"Level":"error","Message":"boom","Code":500,"Source":"api"},` +
+		`{"Level":"warning","Message":"slow","Code":300,"Source":"worker"},` +
+		`{"Level":"error","Message":"kaput","Code":503,"Source":"worker"},` +
+		`{"Level":"info","Message":"ok","Code":201,"Source":"api"}` +
+		`]`)
 	url := monitorURL + "/dataCollectionRules/dcr1/streams/Custom-AppLogs_CL"
 	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
