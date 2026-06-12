@@ -4,6 +4,10 @@ A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 (GCP). You run a single Docker container and point the **Azure CLI** or any
 **Azure SDK** at it — no code changes required.
 
+It currently emulates **Blob Storage**, **Event Grid** (namespace topics, pull
+delivery), **Web PubSub**, and **Service Bus** (queues and topics over AMQP),
+each on its own port but all inside the one process and container.
+
 ## Quick start
 
 ```bash
@@ -12,7 +16,14 @@ task docker:up
 docker compose -f docker/docker-compose.dev.yml up --build
 ```
 
-The Blob endpoint is then available at `http://127.0.0.1:10000/devstoreaccount1`.
+The services are then available at:
+
+| Service     | Endpoint                                   |
+| ----------- | ------------------------------------------ |
+| Blob        | `http://127.0.0.1:10000/devstoreaccount1`  |
+| Event Grid  | `http://127.0.0.1:10001`                   |
+| Web PubSub  | `http://127.0.0.1:10002`                   |
+| Service Bus | `sb://127.0.0.1:5672` (AMQP)               |
 
 Generate a connection string for your shell (matches Azurite's well-known
 development credentials, so existing tooling works unchanged):
@@ -38,6 +49,17 @@ az storage blob list --container-name demo -o table
 connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
 client, _ := azblob.NewClientFromConnectionString(connStr, nil)
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
+```
+
+### With the Service Bus SDK
+
+Use the development connection string (plain TCP, no TLS):
+
+```go
+const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true"
+client, _ := azservicebus.NewClientFromConnectionString(connStr, nil)
+sender, _ := client.NewSender("myqueue", nil)
+sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello")}, nil)
 ```
 
 ## Common tasks

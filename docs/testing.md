@@ -4,16 +4,22 @@ localaz has two complementary suites.
 
 ## Unit / integration suite (`test/sdk`)
 
-Driven by the official **Azure Go SDK** (`azblob`). Each test starts an
-in-process emulator backed by a temporary directory and exercises it through the
-same client code a real Go application would use. This is fast, hermetic, and
-needs no Docker or external tools.
+Driven by the official **Azure Go SDKs** — `azblob` for Blob, `aznamespaces`
+for Event Grid, `azwebpubsub` for Web PubSub, and `azservicebus` for Service
+Bus. Each test starts an in-process emulator and exercises it through the same
+client code a real Go application would use. This is fast, hermetic, and needs
+no Docker or external tools.
 
 ```bash
 task test:unit
 # or
 go test ./...
 ```
+
+This is the suite that covers **all four services**. The SDKs accept a custom
+endpoint (or, for Service Bus, a `UseDevelopmentEmulator=true` connection
+string), so they can be pointed at localaz and exercise the real wire protocol
+end to end.
 
 ## End-to-end suite (`test/e2e`)
 
@@ -40,6 +46,26 @@ task docker:up
 LOCALAZ_E2E_ENDPOINT=http://127.0.0.1:10000/devstoreaccount1 \
   go test -tags e2e -count=1 -v ./test/e2e/...
 ```
+
+### Why the E2E suite covers Blob only
+
+The E2E suite is intentionally limited to Blob Storage because the Azure CLI
+cannot be pointed at a local emulator for the other services:
+
+- **Blob** — `az storage` fully supports a custom data-plane endpoint via
+  `BlobEndpoint` in the connection string, so the CLI talks directly to localaz.
+- **Event Grid** and **Service Bus** — `az eventgrid` and `az servicebus` are
+  ARM *management-plane* commands only (they talk to `management.azure.com` to
+  manage resources). There are no data-plane publish/send/receive commands to
+  point anywhere.
+- **Web PubSub** — `az webpubsub service` (extension) does have data-plane
+  commands, but they resolve the target endpoint from ARM via `-n`/`-g`; there
+  is no `--connection-string` or `--endpoint` override to redirect them to
+  `127.0.0.1`.
+
+For those three services the **SDK suite** above is the equivalent end-to-end
+signal: it drives the official clients against localaz over the real protocol,
+which the CLI is simply unable to do locally.
 
 ## Why Go for the E2E suite (instead of a shell script)
 
