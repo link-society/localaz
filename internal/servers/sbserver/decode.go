@@ -226,6 +226,10 @@ func (d *decoder) readString(width int, sym bool) (any, error) {
 	return string(raw), nil
 }
 
+// errCollectionTooLarge is returned when a list/map header declares more
+// elements than the remaining buffer can hold — a crafted-frame OOM vector.
+var errCollectionTooLarge = errors.New("amqp: collection size exceeds buffer")
+
 func (d *decoder) readList(width int) ([]any, error) {
 	if _, err := d.readSize(width); err != nil {
 		return nil, err
@@ -233,6 +237,11 @@ func (d *decoder) readList(width int) ([]any, error) {
 	count, err := d.readSize(width)
 	if err != nil {
 		return nil, err
+	}
+	// Each element needs at least one byte, so a count beyond the remaining
+	// buffer is malformed; reject before allocating to avoid a crafted-frame OOM.
+	if count < 0 || count > d.remaining() {
+		return nil, errCollectionTooLarge
 	}
 	items := make([]any, 0, count)
 	for i := 0; i < count; i++ {
@@ -252,6 +261,11 @@ func (d *decoder) readMap(width int) (map[any]any, error) {
 	count, err := d.readSize(width)
 	if err != nil {
 		return nil, err
+	}
+	// Each element needs at least one byte, so a count beyond the remaining
+	// buffer is malformed; reject before allocating to avoid a crafted-frame OOM.
+	if count < 0 || count > d.remaining() {
+		return nil, errCollectionTooLarge
 	}
 	m := make(map[any]any, count/2)
 	for i := 0; i < count; i += 2 {

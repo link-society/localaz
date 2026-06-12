@@ -144,7 +144,11 @@ same image.
   library exists. AMQP **handles are session-scoped**, so links must be keyed by
   `(channel, handle)`, not handle alone (the `$cbs`/`$management` links collide
   otherwise). Message bodies are relayed verbatim; only performatives and CBS
-  are decoded.
+  are decoded. The hand-rolled decoder bounds list/map element counts against
+  the remaining buffer, and `readFrame` rejects frames larger than the
+  advertised 64 KiB max-frame-size (`maxFrameSize` in `frame.go`, the single
+  source of truth shared with `conn.onOpen`); otherwise a ~12-byte crafted frame
+  could trigger an unauthenticated multi-GB allocation / OOM.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
   Monitor Logs do not persist — their traffic is transient, so there is no
   `/data` format for them. The AAD/ARM control plane is in-memory too (one
