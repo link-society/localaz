@@ -200,6 +200,18 @@ same image.
   direct in-package unit tests (`internal/servers/tableserver/filter_*_test.go`
   and `internal/servers/monitorserver/{kql,predicate}_test.go`), driven through
   their public entry points (`parseFilter`, `evalKQL`).
+- **Table `$top` is enforced before appending.** `$top=N` returns at most `N`
+  entities, and `$top=0` returns none. The limit check in `listEntities` runs
+  before the entity is added to the result, so it is not off by one.
+- **Table entity ETag uses the fixed seven-digit datetime form.** The weak
+  `odata.etag` (built by `etagFor` in `tablestore/store.go`) embeds a
+  `datetime'…'` literal formatted with `.0000000` — not Go's `.9…` layout —
+  so trailing zeros are preserved and the ETag's datetime exactly matches the
+  rendered `Timestamp` representation.
+- **Queue `numofmessages` is clamped to 1–32.** Get Messages floors the value at
+  1 and rejects anything above Azure's maximum of 32 with `400`
+  `OutOfRangeQueryParameterValue` (`azerr.CodeOutOfRangeQueryParam`), matching
+  the real service.
 - **Docker `/data` permissions.** The runtime image is distroless `nonroot`
   (uid 65532). The Dockerfile creates `/data` in the build stage and copies it
   with `--chown=65532:65532` so the non-root user can write to it.

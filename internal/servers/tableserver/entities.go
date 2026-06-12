@@ -77,10 +77,12 @@ func (s *Server) listEntities(w http.ResponseWriter, r *http.Request, account, t
 		if !filter(rendered) {
 			continue
 		}
-		value = append(value, projectSelect(rendered, selectClause))
+		// Enforce $top before appending so $top=N returns at most N entities,
+		// including $top=0 which must return none.
 		if top >= 0 && len(value) >= top {
 			break
 		}
+		value = append(value, projectSelect(rendered, selectClause))
 	}
 
 	out, err := json.Marshal(map[string]any{

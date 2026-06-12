@@ -82,8 +82,13 @@ func (s *Store) lookupLocked(account, name string) (*table, error) {
 	return t, nil
 }
 
+// etagDatetimeFmt is the datetime layout embedded in the entity ETag. It uses
+// the fixed seven-digit fractional form ('0' digits) so trailing zeros are not
+// dropped, keeping the ETag consistent with the rendered Timestamp.
+const etagDatetimeFmt = "2006-01-02T15:04:05.0000000Z"
+
 // etagFor builds an Azure-style weak ETag from a timestamp. The value is opaque
 // to clients and used for If-Match concurrency.
 func etagFor(ts time.Time) string {
-	return fmt.Sprintf("W/\"datetime'%s'\"", url.QueryEscape(ts.UTC().Format("2006-01-02T15:04:05.9999999Z")))
+	return fmt.Sprintf("W/\"datetime'%s'\"", url.QueryEscape(ts.UTC().Format(etagDatetimeFmt)))
 }
