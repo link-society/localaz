@@ -1,0 +1,15 @@
+{{ define "main" }}
+  {{ .Content }}
+  {{ with .Pages }}
+  <div class="columns is-multiline mt-2">
+    {{ range .ByWeight }}
+    <div class="column is-half">
+      <div class="box">
+        <a href="{{ .RelPermalink }}" class="has-text-weight-semibold">{{ .Title }}</a>
+        {{ with .Description }}<p class="has-text-grey is-size-7 mt-1">{{ . }}</p>{{ end }}
+      </div>
+    </div>
+    {{ end }}
+  </div>
+  {{ end }}
+{{ end }}

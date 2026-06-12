@@ -11,8 +11,8 @@ Storage, Queue Storage, Table Storage, Event Grid, Web PubSub, Service Bus, and
 Monitor Logs, plus an Entra ID (AAD) + Resource Manager (ARM) **control plane**
 that lets the CLI/SDKs treat localaz as a custom Azure cloud (register, log in,
 and route data-plane commands to localaz). Everything runs in the one process,
-each on its own port. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full
-design.
+each on its own port. The full design and per-service reference live in the
+`docs/` Hugo site.
 
 - Module path: `localaz.dev`
 - Go version: 1.26
@@ -47,10 +47,11 @@ internal/utils/httpx           shared HTTP helpers
 internal/utils/azwire          shared Azure wire-format helpers
 internal/utils/azerr           faithful Azure error responses
 internal/utils/devcert               self-signed TLS material for the control plane
-test/sdk                       integration tests via the Azure Go SDKs
-test/cli                       end-to-end tests via the Azure CLI (build tag: cli)
+test/sdk                       integration tests via the Azure Go SDKs (+ README.md)
+test/cli                       end-to-end tests via the Azure CLI, build tag: cli (+ README.md)
+test/README.md                 test-suite architecture overview
 docker/                        localaz.dockerfile, docker-compose.dev.yml
-docs/                          configuration, supported APIs, testing
+docs/                          Hugo documentation site (content/, layouts/, static/)
 ```
 
 ## Services and ports
@@ -110,6 +111,12 @@ The CLI suite shells out to the real `az` CLI and is guarded by the `cli` build
 tag so it never runs under `task test:unit`. `test/cli/doc.go` is an untagged
 package doc file so `go test ./...` does not fail with "build constraints
 exclude all Go files".
+
+The documentation lives in `docs/` as a [Hugo](https://gohugo.io) site
+(`content/` Markdown, `layouts/` templates, `static/` assets). Preview it with
+`hugo server` from `docs/`; build with `hugo`. Architecture diagrams use
+fenced ```mermaid``` code blocks rendered by a code-block render hook. The
+`docs/public/` and `docs/resources/` build artifacts are git-ignored.
 
 ## Adding a new service
 

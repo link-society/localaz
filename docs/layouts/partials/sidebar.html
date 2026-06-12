@@ -1,0 +1,20 @@
+{{ $svc := site.GetPage "/services" }}
+<aside class="menu">
+  <p class="menu-label">Documentation</p>
+  <ul class="menu-list">
+    <li><a class="{{ if .IsHome }}is-active{{ end }}" href="{{ "/" | relURL }}">Overview</a></li>
+    {{ with site.GetPage "/get-started" }}
+    <li><a class="{{ if eq $.RelPermalink .RelPermalink }}is-active{{ end }}" href="{{ .RelPermalink }}">Get Started</a></li>
+    {{ end }}
+    {{ with $svc }}
+    <li>
+      <a class="{{ if eq $.RelPermalink .RelPermalink }}is-active{{ end }}" href="{{ .RelPermalink }}">Services</a>
+      <ul>
+        {{ range .Pages.ByWeight }}
+        <li><a class="{{ if eq $.RelPermalink .RelPermalink }}is-active{{ end }}" href="{{ .RelPermalink }}">{{ .Title }}</a></li>
+        {{ end }}
+      </ul>
+    </li>
+    {{ end }}
+  </ul>
+</aside>

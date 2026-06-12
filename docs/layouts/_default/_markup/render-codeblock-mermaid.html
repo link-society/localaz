@@ -1,0 +1,5 @@
+{{- /* Render ```mermaid code fences as mermaid diagrams. */ -}}
+<pre class="mermaid">
+{{- .Inner | htmlEscape | safeHTML -}}
+</pre>
+{{- .Page.Store.Set "hasMermaid" true -}}

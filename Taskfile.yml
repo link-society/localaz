@@ -5,6 +5,7 @@
 #   task test:unit       run the Go SDK integration tests
 #   task test:cli        run the Azure CLI end-to-end tests
 #   task docker:up       start the dev container
+#   task docs:serve      preview the documentation site
 #   eval "$(task env:conn-string)"   export the connection string for `az`
 version: "3"
 
@@ -84,6 +85,18 @@ tasks:
     desc: Tail the dev container logs
     cmds:
       - "{{.COMPOSE}} logs -f"
+
+  docs:build:
+    desc: Build the Hugo documentation site (output in docs/public)
+    dir: docs
+    cmds:
+      - hugo --gc --minify
+
+  docs:serve:
+    desc: Serve the documentation site locally with live reload
+    dir: docs
+    cmds:
+      - hugo server --buildDrafts --disableFastRender
 
   env:conn-string:
     desc: Print the AZURE_STORAGE_CONNECTION_STRING export line (use with eval)

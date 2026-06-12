@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="{{ .Site.LanguageCode | default "en" }}" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ .Title }} · {{ .Site.Title }}{{ end }}</title>
+  <meta name="description" content="{{ with .Description }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.2/css/bulma.min.css">
+  <style>
+    html { scroll-behavior: smooth; }
+    .layout { margin-top: 1.5rem; }
+    .sidebar { position: sticky; top: 1.5rem; align-self: flex-start; }
+    .content pre.mermaid {
+      background: transparent;
+      padding: 0;
+      text-align: center;
+    }
+    .content pre.mermaid svg { max-width: 720px; height: auto; }
+    .content h2 { border-bottom: 1px solid #ededed; padding-bottom: .3rem; }
+    .content table td, .content table th { vertical-align: top; }
+    .highlight pre { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <nav class="navbar is-dark" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+      <a class="navbar-item has-text-weight-bold is-size-5" href="{{ "/" | relURL }}">localaz</a>
+      <span class="navbar-item is-hidden-mobile has-text-grey-light">local Azure emulator</span>
+    </div>
+  </nav>
+  <div class="container is-fluid layout">
+    <div class="columns">
+      <div class="column is-one-quarter-tablet is-one-fifth-desktop">
+        <div class="sidebar">
+          {{ partial "sidebar.html" . }}
+        </div>
+      </div>
+      <main class="column">
+        <div class="content">
+          {{ if not .IsHome }}<h1 class="title is-2">{{ .Title }}</h1>{{ end }}
+          {{ block "main" . }}{{ .Content }}{{ end }}
+        </div>
+        <footer class="content has-text-grey is-size-7 mt-6 pt-4" style="border-top:1px solid #ededed;">
+          <p>localaz — a local Azure emulator. Documentation built with Hugo &amp; Bulma.</p>
+        </footer>
+      </main>
+    </div>
+  </div>
+  {{ if .Store.Get "hasMermaid" }}
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+  </script>
+  {{ end }}
+</body>
+</html>

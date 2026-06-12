@@ -4,6 +4,8 @@ A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 (GCP). You run a single Docker container and point the **Azure CLI** or any
 **Azure SDK** at it — no code changes required.
 
+Documentation: **[localaz.dev](https://localaz.dev)**
+
 It currently emulates **Blob Storage**, **Queue Storage**, **Table Storage**,
 **Event Grid** (namespace topics, pull delivery), **Web PubSub**, **Service
 Bus** (queues and topics over AMQP), and **Monitor Logs** (ingestion and
@@ -81,9 +83,9 @@ sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello")}, nil)
 
 Register localaz as a cloud, sign in, and drive data-plane commands such as
 `az monitor log-analytics query` through it. The control plane needs TLS, so
-run localaz with `-tls-auto` and trust the generated cert. See
-[Configuration](docs/configuration.md#control-plane-entra-id--resource-manager)
-for the full recipe:
+run localaz with `-tls-auto` and trust the generated cert. See the
+[control plane docs](https://localaz.dev/services/control-plane/) for the full
+recipe:
 
 ```bash
 export REQUESTS_CA_BUNDLE=<data>/tls/localaz.crt SSL_CERT_FILE=<data>/tls/localaz.crt
@@ -111,12 +113,4 @@ task env:conn-string # print an export line for the connection string
 
 ## Documentation
 
-- [Architecture](ARCHITECTURE.md) — process layout and design decisions.
-- [Configuration](docs/configuration.md) — flags, env vars, endpoint and credentials.
-- [Supported APIs](docs/supported-apis.md) — implemented operations and roadmap.
-- [Testing](docs/testing.md) — running the suites and why the CLI suite is in Go.
-- [AGENTS.md](AGENTS.md) — guide for AI agents and contributors working on the code.
-
-## Roadmap
-
-- Optional Shared Key signature verification
+Full documentation lives at **[localaz.dev](https://localaz.dev)**.
