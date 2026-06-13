@@ -23,11 +23,12 @@ runs on its own port inside the one process and container.
 | [Event Grid](services/event-grid/) | `http://127.0.0.1:10003` | HTTP / REST | &#10060; | Namespace topics, pull delivery |
 | [Web PubSub](services/web-pubsub/) | `http://127.0.0.1:10004` | HTTP + WebSocket | &#10060; | REST broadcast + `json.webpubsub.azure.v1` |
 | [Service Bus](services/service-bus/) | `sb://127.0.0.1:5672` | AMQP 1.0 over TCP | &#10060; | Queues + topic/subscription fan-out |
-| [Monitor Logs](services/monitor-logs/) | `http://127.0.0.1:10005` | HTTP / REST | &#10060; | Logs ingestion + KQL-subset query |
-| [Control plane](services/control-plane/) | `https://127.0.0.1:10006`–`10007` | HTTP / REST (HTTPS) | &#10060; | Entra ID (AAD) + Resource Manager (ARM) |
+| [Monitor Logs](services/monitor-logs/) | `https://127.0.0.1:10005` | HTTPS / REST | &#10060; | Logs ingestion + KQL-subset query |
+| [Control plane](services/control-plane/) | `https://127.0.0.1:10006`–`10007` | HTTPS / REST | &#10060; | Entra ID (AAD) + Resource Manager (ARM) |
 
-Blob, Queue and Table deliberately occupy Azurite's `UseDevelopmentStorage=true`
-ports (`10000`/`10001`/`10002`), so existing Azurite tooling and connection
+Blob, Queue and Table use the standard Azure development-storage ports
+(`10000`/`10001`/`10002`) with the well-known `devstoreaccount1` account, so the
+`UseDevelopmentStorage=true` shorthand and existing tooling and connection
 strings work unchanged. The pub/sub services follow on `10003`/`10004`/`10005`,
 and the Entra ID + Resource Manager control plane on `10006`/`10007`.
 

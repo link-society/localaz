@@ -50,17 +50,23 @@ Once running, the services are available at:
 | Table | `http://127.0.0.1:10002/devstoreaccount1` |
 | Event Grid | `http://127.0.0.1:10003` |
 | Web PubSub | `http://127.0.0.1:10004` |
-| Monitor Logs | `http://127.0.0.1:10005` |
-| Entra ID (AAD) | `http://127.0.0.1:10006` (HTTPS with TLS) |
-| Resource Manager (ARM) | `http://127.0.0.1:10007` (HTTPS with TLS) |
+| Monitor Logs | `https://127.0.0.1:10005` |
+| Entra ID (AAD) | `https://127.0.0.1:10006` |
+| Resource Manager (ARM) | `https://127.0.0.1:10007` |
 | Service Bus | `sb://127.0.0.1:5672` (AMQP) |
 
-## Connect a client
+The storage and pub/sub services speak plain HTTP. The control-plane services
+(Monitor Logs, Entra ID, Resource Manager) carry bearer tokens, which the SDKs
+refuse over plain HTTP — so they serve **HTTPS** once TLS is enabled (`-tls-auto`).
+See [Control plane](../services/control-plane/) for the TLS and sign-in recipe.
 
-The credentials match Azurite's well-known development account, so existing
-tooling works unchanged. Because localaz uses Azurite's default storage ports,
-the SDKs and CLI can connect with the `UseDevelopmentStorage=true` shorthand —
-no account name or key to write down or paste anywhere:
+## Connect a client (storage)
+
+localaz uses the **well-known Azure development storage account**
+(`devstoreaccount1`) on the standard development ports (`10000`/`10001`/`10002`),
+so the SDKs and the CLI can connect with the `UseDevelopmentStorage=true`
+shorthand — there is no account name or key to write down or paste anywhere.
+Export it once:
 
 ```bash
 export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
@@ -70,14 +76,23 @@ Both the Azure CLI and the SDKs pick up `AZURE_STORAGE_CONNECTION_STRING`
 automatically. A quick smoke test with the CLI:
 
 ```bash
+# 1. Create a container, 2. upload a file, 3. list what's there.
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
 az storage blob list --container-name demo -o table
 ```
 
 > The emulator accepts the Shared Key `Authorization` header (and Service Bus
-> CBS tokens) but does **not** verify them.
+> CBS tokens) but does **not** verify them — any well-formed credential is
+> accepted, which is what makes the shared-account shorthand work.
 
-See [Services](../services/) for per-service configuration flags, environment
-variables, and SDK/CLI examples.
+## Next steps
+
+- **Storage & pub/sub** (Blob, Queue, Table, Event Grid, Web PubSub, Service Bus)
+  — see [Services](../services/) for the per-service endpoint, configuration
+  flags, and a Go SDK + Azure CLI tutorial for each.
+- **Control plane** (Entra ID + Resource Manager) — to drive `az login`,
+  `az group`, `az servicebus`, or `az monitor log-analytics query` against
+  localaz, follow the TLS and cloud-registration recipe in
+  [Control plane](../services/control-plane/).
 

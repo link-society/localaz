@@ -16,5 +16,11 @@
       </ul>
     </li>
     {{ end }}
+    {{ with site.GetPage "/architecture" }}
+    <li><a class="{{ if eq $.RelPermalink .RelPermalink }}is-active{{ end }}" href="{{ .RelPermalink }}">Architecture</a></li>
+    {{ end }}
+    {{ with site.GetPage "/reference" }}
+    <li><a class="{{ if eq $.RelPermalink .RelPermalink }}is-active{{ end }}" href="{{ .RelPermalink }}">Reference</a></li>
+    {{ end }}
   </ul>
 </aside>

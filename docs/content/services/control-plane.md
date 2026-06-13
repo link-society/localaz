@@ -98,17 +98,48 @@ credential values are not sensitive in this context. Once signed in,
 
 ## Example: Go SDK
 
+This tutorial authenticates with a service-principal credential and creates a
+resource group through the emulated Resource Manager. The key step is the custom
+`localCloud`, which points the SDK at the local Entra ID and ARM endpoints.
+
+> **Prerequisites:** run localaz with `-tls-auto` and have the Go client trust
+> the generated certificate — e.g. set a custom `http.Transport` on
+> `ClientOptions.Transport`. localaz does not validate the app id, secret, or
+> tokens, so the exact values are not sensitive here.
+
 ```go
+import (
+    "context"
+
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+    "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+    "github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armresources"
+)
+
+ctx := context.Background()
+
+// localCloud points the SDK at the local Entra ID (sign-in) and ARM endpoints.
+localCloud := cloud.Configuration{
+    ActiveDirectoryAuthorityHost: "https://127.0.0.1:10006/",
+    Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
+        cloud.ResourceManager: {
+            Endpoint: "https://127.0.0.1:10007/",
+            Audience: "https://127.0.0.1:10007/",
+        },
+    },
+}
+
+// 1. Authenticate a service principal against the "adfs" tenant.
 cred, _ := azidentity.NewClientSecretCredential("adfs", "<app-id>", "<secret>",
     &azidentity.ClientSecretCredentialOptions{
         ClientOptions: azcore.ClientOptions{Cloud: localCloud},
     })
 
+// 2. Create a resource group through the emulated Resource Manager.
 client, _ := armresources.NewResourceGroupsClient("<subscription-id>", cred,
     &arm.ClientOptions{ClientOptions: azcore.ClientOptions{Cloud: localCloud}})
 client.CreateOrUpdate(ctx, "rg1", armresources.ResourceGroup{Location: to.Ptr("local")}, nil)
 ```
-
-where `localCloud` is a `cloud.Configuration` pointing its
-`ActiveDirectoryAuthorityHost` at `https://127.0.0.1:10006/` and the ARM
-endpoint at `https://127.0.0.1:10007/`.
