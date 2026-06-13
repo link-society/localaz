@@ -23,6 +23,7 @@ import (
 	"localaz.dev/internal/servers/armserver"
 	"localaz.dev/internal/servers/blobserver"
 	"localaz.dev/internal/servers/egserver"
+	"localaz.dev/internal/servers/kvserver"
 	"localaz.dev/internal/servers/monitorserver"
 	"localaz.dev/internal/servers/queueserver"
 	"localaz.dev/internal/servers/sbserver"
@@ -31,6 +32,7 @@ import (
 	"localaz.dev/internal/stores/armstore"
 	"localaz.dev/internal/stores/blobstore/fsstore"
 	"localaz.dev/internal/stores/egstore"
+	"localaz.dev/internal/stores/keyvaultstore"
 	"localaz.dev/internal/stores/monitorstore"
 	"localaz.dev/internal/stores/queuestore"
 	"localaz.dev/internal/stores/sbstore"
@@ -47,6 +49,7 @@ func main() {
 	monitorAddr := flag.String("monitor-addr", envOr("LOCALAZ_MONITOR_ADDR", ":10005"), "monitor logs service listen address")
 	aadAddr := flag.String("aad-addr", envOr("LOCALAZ_AAD_ADDR", ":10006"), "entra id (aad) service listen address")
 	armAddr := flag.String("arm-addr", envOr("LOCALAZ_ARM_ADDR", ":10007"), "resource manager (arm) service listen address")
+	keyVaultAddr := flag.String("keyvault-addr", envOr("LOCALAZ_KEYVAULT_ADDR", ":10008"), "key vault service listen address")
 	serviceBusAddr := flag.String("servicebus-addr", envOr("LOCALAZ_SERVICEBUS_ADDR", ":5672"), "service bus AMQP listen address")
 	dataDir := flag.String("data", envOr("LOCALAZ_DATA_DIR", "/data"), "directory for persisted state")
 	cloudName := flag.String("arm-cloud-name", envOr("LOCALAZ_ARM_CLOUD_NAME", "localaz"), "cloud name advertised by the ARM metadata document")
@@ -68,8 +71,11 @@ func main() {
 	fatal(logger, "init table store", err)
 	aadServer, err := aadserver.New(*dataDir)
 	fatal(logger, "init aad server", err)
+	keyVaultStore, err := keyvaultstore.New(*dataDir)
+	fatal(logger, "init key vault store", err)
 
 	const scheme = "https"
+	aadAuthority := controlURL(scheme, *advertiseHost, *aadAddr) + "/adfs"
 	armStore := armstore.New(armstore.Config{
 		CloudName:            *cloudName,
 		TenantID:             "adfs",
@@ -88,6 +94,7 @@ func main() {
 		{name: "monitor", addr: *monitorAddr, handler: monitorserver.New(monitorstore.New())},
 		{name: "aad", addr: *aadAddr, handler: aadServer},
 		{name: "arm", addr: *armAddr, handler: armserver.New(armStore)},
+		{name: "keyvault", addr: *keyVaultAddr, handler: kvserver.New(keyVaultStore, aadAuthority)},
 	}
 
 	amqp := amqpService{addr: *serviceBusAddr, server: sbserver.New(sbstore.New())}
