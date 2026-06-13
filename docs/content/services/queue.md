@@ -4,24 +4,11 @@ description: "Messages, visibility timeouts, and pop receipts."
 weight: 2
 ---
 
-Azure Queue Storage emulation over the native REST (XML) protocol. Compatible
-with the `azqueue` SDK and the `az storage queue` / `az storage message` CLI
-commands.
-
-## Endpoint
-
-| | |
-| --- | --- |
-| URL | `http://127.0.0.1:10001/devstoreaccount1` |
-| Protocol | HTTP / REST (XML) |
-| Persisted | Yes — state lives under `/data` |
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-queue-addr` | `LOCALAZ_QUEUE_ADDR` | `:10001` |
-| `-data` | `LOCALAZ_DATA_DIR` | `/data` |
+Azure Queue Storage over the native REST (XML) protocol, served at
+`http://127.0.0.1:10001/devstoreaccount1` and compatible with the `azqueue` SDK
+and the `az storage queue` / `az storage message` commands. Queue state is
+persisted under `/data`. See [Configuration](/configuration) to change ports,
+addresses, and the data directory.
 
 ## Supported operations
 
@@ -36,35 +23,55 @@ commands.
 | Delete Message | `DELETE /{account}/{queue}/messages/{messageid}` |
 | Clear Messages | `DELETE /{account}/{queue}/messages` |
 
-Supported semantics: queue metadata and the approximate message count, dequeue
-visibility timeouts and pop receipts, message TTL (including the infinite `-1`
-TTL with eviction on access), and dequeue counts.
+Queue metadata, the approximate message count, visibility timeouts and pop
+receipts, message TTL (including the infinite `-1` TTL), and dequeue counts are
+supported.
 
-**Not yet implemented:** SAS, and Shared Key signature verification.
+**Not implemented:** SAS and Shared Key signature verification.
 
-## Example: Go SDK
-
-```go
-connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
-client, _ := azqueue.NewServiceClientFromConnectionString(connStr, nil)
-queue := client.NewQueueClient("work-items")
-
-ctx := context.Background()
-queue.Create(ctx, nil)
-queue.EnqueueMessage(ctx, "hello", nil)
-
-resp, _ := queue.DequeueMessage(ctx, nil)
-msg := resp.Messages[0]
-queue.DeleteMessage(ctx, *msg.MessageID, *msg.PopReceipt, nil)
-```
-
-## Example: Azure CLI
+## Azure CLI
 
 ```bash
-# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
+export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 
 az storage queue create --name work-items
-az storage message put --queue-name work-items --content "hello"
-az storage message get --queue-name work-items
+az storage message put --queue-name work-items --content "hello-from-the-cli"
 az storage message peek --queue-name work-items
+az storage message get --queue-name work-items
+az storage message clear --queue-name work-items
+az storage queue delete --name work-items
+```
+
+## Go SDK
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue"
+)
+
+func main() {
+	ctx := context.Background()
+	svc, err := azqueue.NewServiceClientWithNoCredential("http://127.0.0.1:10001/devstoreaccount1", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	queue := svc.NewQueueClient("work-items")
+	queue.Create(ctx, nil)
+	queue.EnqueueMessage(ctx, "hello queue", nil)
+
+	resp, err := queue.DequeueMessage(ctx, nil)
+	if err != nil {
+		panic(err)
+	}
+	msg := resp.Messages[0]
+	fmt.Println(*msg.MessageText)
+
+	queue.DeleteMessage(ctx, *msg.MessageID, *msg.PopReceipt, nil)
+}
 ```

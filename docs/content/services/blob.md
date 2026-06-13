@@ -4,71 +4,93 @@ description: "Block blobs, metadata, ranges, and container/blob listing."
 weight: 1
 ---
 
-Azure Blob Storage emulation: containers and block blobs over the native REST
-(XML) protocol. Compatible with the `azblob` SDK and the `az storage` CLI.
-
-## Endpoint
-
-| | |
-| --- | --- |
-| URL | `http://127.0.0.1:10000/devstoreaccount1` |
-| Protocol | HTTP / REST (XML) |
-| Persisted | Yes — state lives under `/data` |
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-addr` | `LOCALAZ_BLOB_ADDR` | `:10000` |
-| `-data` | `LOCALAZ_DATA_DIR` | `/data` |
-
-The Blob flag is `-addr` (not `-blob-addr`) for back-compat with Azurite. The
-port matches Azurite's `UseDevelopmentStorage=true` shorthand.
+Azure Blob Storage over the native REST (XML) protocol, served at
+`http://127.0.0.1:10000/devstoreaccount1` and compatible with the `azblob` SDK
+and the `az storage blob` / `az storage container` commands. Blob state is
+persisted under `/data`. See [Configuration](/configuration) to change ports,
+addresses, and the data directory.
 
 ## Supported operations
 
 | Operation | REST surface |
 | --------- | ------------ |
 | List Containers | `GET /{account}?comp=list` |
-| Create Container | `PUT /{account}/{container}?restype=container` |
-| Get Container Properties | `GET/HEAD /{account}/{container}?restype=container` |
-| Delete Container | `DELETE /{account}/{container}?restype=container` |
-| List Blobs (flat + hierarchical) | `GET /{account}/{container}?restype=container&comp=list` |
+| Create / Delete Container | `PUT` / `DELETE /{account}/{container}?restype=container` |
+| Get Container Properties | `GET`/`HEAD /{account}/{container}?restype=container` |
+| List Blobs — flat & hierarchical, paginated | `GET /{account}/{container}?restype=container&comp=list` |
 | Put Blob (block blob) | `PUT /{account}/{container}/{blob}` |
-| Put Block / Put Block List | `PUT /{account}/{container}/{blob}?comp=block` / `comp=blocklist` |
+| Put Block / Put Block List | `PUT .../{blob}?comp=block` / `comp=blocklist` |
 | Get Blob (+ range requests) | `GET /{account}/{container}/{blob}` |
-| Get/Head Blob Properties | `HEAD /{account}/{container}/{blob}` |
+| Get / Head Blob Properties | `HEAD /{account}/{container}/{blob}` |
 | Delete Blob | `DELETE /{account}/{container}/{blob}` |
 
-Supported semantics include container/blob metadata (`x-ms-meta-*`), content
-settings, Content-MD5 round-tripping, virtual-directory listing via a delimiter,
-single-shot and staged-block uploads, and single-range `GET` requests.
+Metadata (`x-ms-meta-*`), content settings, Content-MD5 round-tripping,
+single-shot and staged-block uploads, and virtual-directory listing via a
+delimiter are supported.
 
-**Not yet implemented:** page/append blobs, leases, snapshots, versioning, soft
+**Not implemented:** page/append blobs, leases, snapshots, versioning, soft
 delete, tags, SAS, and Shared Key signature verification.
 
-## Example: Go SDK
-
-```go
-connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
-client, _ := azblob.NewClientFromConnectionString(connStr, nil)
-
-ctx := context.Background()
-client.CreateContainer(ctx, "demo", nil)
-client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
-
-resp, _ := client.DownloadStream(ctx, "demo", "hello.txt", nil)
-data, _ := io.ReadAll(resp.Body)
-fmt.Println(string(data))
-```
-
-## Example: Azure CLI
+## Azure CLI
 
 ```bash
-# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
+export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 
-az storage container create --name demo
-az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
-az storage blob list --container-name demo -o table
-az storage blob download --container-name demo --name hello.txt --file ./out.txt
+echo "hello, localaz!" > hello.txt
+
+az storage container create --name data
+az storage blob upload --container-name data --name hello.txt --file ./hello.txt --content-type text/plain
+az storage blob exists --container-name data --name hello.txt
+az storage blob show --container-name data --name hello.txt
+az storage blob list --container-name data -o table
+az storage blob download --container-name data --name hello.txt --file ./out.txt
+az storage blob delete --container-name data --name hello.txt
+```
+
+## Go SDK
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+)
+
+func main() {
+	ctx := context.Background()
+	client, err := azblob.NewClientWithNoCredential("http://127.0.0.1:10000/devstoreaccount1", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	client.CreateContainer(ctx, "data", nil)
+	client.UploadBuffer(ctx, "data", "hello.txt", []byte("hello, localaz!"),
+		&azblob.UploadBufferOptions{
+			HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr("text/plain")},
+		})
+
+	resp, err := client.DownloadStream(ctx, "data", "hello.txt", nil)
+	if err != nil {
+		panic(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	fmt.Println(string(body))
+
+	pager := client.NewListBlobsFlatPager("data", nil)
+	for pager.More() {
+		page, _ := pager.NextPage(ctx)
+		for _, b := range page.Segment.BlobItems {
+			fmt.Println(*b.Name)
+		}
+	}
+
+	client.DeleteBlob(ctx, "data", "hello.txt", nil)
+}
 ```

@@ -4,23 +4,10 @@ description: "REST broadcast plus the json.webpubsub.azure.v1 WebSocket subproto
 weight: 5
 ---
 
-Azure Web PubSub emulation: a REST management surface plus WebSocket client
-connections using the `json.webpubsub.azure.v1` subprotocol. Compatible with the
-`azwebpubsub` SDK.
-
-## Endpoint
-
-| | |
-| --- | --- |
-| URL | `http://127.0.0.1:10004` |
-| Protocol | HTTP + WebSocket |
-| Persisted | No — hub state is in-memory |
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-webpubsub-addr` | `LOCALAZ_WEBPUBSUB_ADDR` | `:10004` |
+Azure Web PubSub: a REST management surface plus WebSocket client connections
+using the `json.webpubsub.azure.v1` subprotocol, served at
+`http://127.0.0.1:10004` and compatible with the `azwebpubsub` SDK. Hub state is
+in-memory. See [Configuration](/configuration) to change the listen address.
 
 ## Supported operations
 
@@ -37,23 +24,41 @@ connections using the `json.webpubsub.azure.v1` subprotocol. Compatible with the
 Client access URLs are signed locally; group join/leave and acks over the
 WebSocket are supported.
 
-> Web PubSub is **SDK-only** for the CLI: `az webpubsub service` resolves its
-> endpoint from ARM via `-n`/`-g`, with no `--endpoint`/`--connection-string`
-> override to redirect it to `127.0.0.1`.
+**Not implemented:** the MQTT subprotocol, event handlers / webhooks, and
+connection authentication.
 
-## Example: Go SDK
+## Azure CLI
+
+`az webpubsub` resolves its endpoint from ARM with no local override, so the
+data plane is **SDK-only** — use the Go example below.
+
+## Go SDK
 
 ```go
-const endpoint = "http://127.0.0.1:10004"
-client, _ := azwebpubsub.NewClientFromConnectionString(
-    "Endpoint=http://127.0.0.1:10004;AccessKey=test;", "hub1", nil)
+package main
 
-// Broadcast to every client connected to the hub.
-client.SendToAll(ctx, azwebpubsub.ContentTypeTextPlain,
-    streaming.NopCloser(strings.NewReader("hello everyone")), nil)
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub"
+)
+
+func main() {
+	ctx := context.Background()
+	client, err := azwebpubsub.NewClientFromConnectionString(
+		"Endpoint=http://127.0.0.1:10004;AccessKey=localaz-test-key;", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"text": "hello room"})
+	client.SendToGroup(ctx, "chat", "room1", azwebpubsub.ContentTypeApplicationJSON,
+		streaming.NopCloser(bytes.NewReader(body)), nil)
+
+	client.SendToAll(ctx, "chat", azwebpubsub.ContentTypeApplicationJSON,
+		streaming.NopCloser(bytes.NewReader(body)), nil)
+}
 ```
-
-## Example: Azure CLI
-
-Not applicable — the `az webpubsub` data-plane commands cannot be redirected to
-a local endpoint. Use the Go SDK example above.

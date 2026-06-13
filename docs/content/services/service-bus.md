@@ -4,72 +4,79 @@ description: "Queues and topic/subscription fan-out over AMQP 1.0."
 weight: 6
 ---
 
-Azure Service Bus emulation over **AMQP 1.0** on plain TCP. Compatible with the
-`azservicebus` SDK when the connection string sets `UseDevelopmentEmulator=true`
-(plain TCP, SASL ANONYMOUS, CBS tokens accepted without verification).
+Azure Service Bus over **AMQP 1.0** on plain TCP at `sb://127.0.0.1:5672`,
+compatible with the `azservicebus` SDK when the connection string sets
+`UseDevelopmentEmulator=true` (plain TCP, SASL ANONYMOUS, CBS tokens accepted
+without verification). Broker state is in-memory; entities are auto-created on
+first use. See [Configuration](/configuration) to change the listen address.
 
-## Endpoint
+## Supported operations
 
-| | |
-| --- | --- |
-| URL | `sb://127.0.0.1:5672` |
-| Protocol | AMQP 1.0 over TCP |
-| Persisted | No — broker state is in-memory |
-
-Connection string for the development emulator:
-
-```text
-Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true
-```
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-servicebus-addr` | `LOCALAZ_SERVICEBUS_ADDR` | `:5672` |
-
-## Supported capabilities
-
-| Capability | Notes |
-| ---------- | ----- |
+| Capability | API |
+| ---------- | --- |
 | Queue send | `client.NewSender(queue)` → `SendMessage` |
 | Queue receive + settle | `client.NewReceiverForQueue(queue)` → `ReceiveMessages` / `CompleteMessage` |
 | Topic send | `client.NewSender(topic)` → `SendMessage` |
 | Subscription receive | `client.NewReceiverForSubscription(topic, sub)` |
 
-Message bodies are relayed verbatim. Peek-lock delivery with disposition-based
-settlement; topic sends fan out to registered subscriptions. Entities are
-auto-created on first data-plane use.
+Message bodies are relayed verbatim with peek-lock delivery and
+disposition-based settlement; topic sends fan out to registered subscriptions.
 
-The **management plane** is served by the control-plane ARM resource provider
-(`Microsoft.ServiceBus`), so `az servicebus` namespace/queue/topic/subscription
-commands work too — see [Control plane](../control-plane/).
-
-**Not yet implemented:** dead-letter queues, scheduled/deferred messages,
+**Not implemented:** dead-letter queues, scheduled / deferred messages,
 sessions, and lock renewal.
 
-## Example: Go SDK
+## Azure CLI
 
-```go
-const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true"
-client, _ := azservicebus.NewClientFromConnectionString(connStr, nil)
-
-sender, _ := client.NewSender("myqueue", nil)
-sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello")}, nil)
-
-receiver, _ := client.NewReceiverForQueue("myqueue", nil)
-msgs, _ := receiver.ReceiveMessages(ctx, 1, nil)
-receiver.CompleteMessage(ctx, msgs[0], nil)
-```
-
-## Example: Azure CLI
-
-The data plane (send/receive) has no CLI surface, but the **management plane**
-runs through the emulated Resource Manager:
+The data plane (send / receive) has no CLI surface, but the **management plane**
+runs through the emulated Resource Manager. After registering localaz as a cloud
+and signing in (see [Control plane](/services/control-plane)):
 
 ```bash
-# After registering localaz as a cloud and signing in (see Control plane):
-az servicebus namespace create --name ns1 --resource-group rg1 --location local
-az servicebus queue create --namespace-name ns1 --resource-group rg1 --name myqueue
-az servicebus topic create --namespace-name ns1 --resource-group rg1 --name events
+az servicebus namespace create -g rg1 -n ns1 -l localaz --sku Standard
+az servicebus namespace show -g rg1 -n ns1
+az servicebus queue create -g rg1 --namespace-name ns1 -n q1
+az servicebus topic create -g rg1 --namespace-name ns1 -n t1
+az servicebus topic subscription create -g rg1 --namespace-name ns1 --topic-name t1 -n s1
+az servicebus queue delete -g rg1 --namespace-name ns1 -n q1
 ```
+
+## Go SDK
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+)
+
+func main() {
+	ctx := context.Background()
+	const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true"
+
+	client, err := azservicebus.NewClientFromConnectionString(connStr, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer client.Close(ctx)
+
+	sender, _ := client.NewSender("myqueue", nil)
+	sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello service bus")}, nil)
+	sender.Close(ctx)
+
+	receiver, _ := client.NewReceiverForQueue("myqueue", nil)
+	defer receiver.Close(ctx)
+
+	msgs, err := receiver.ReceiveMessages(ctx, 1, nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(msgs[0].Body))
+	receiver.CompleteMessage(ctx, msgs[0], nil)
+}
+```
+
+> `SharedAccessKey=test` is the non-secret placeholder required by
+> `UseDevelopmentEmulator=true`; localaz ignores it.

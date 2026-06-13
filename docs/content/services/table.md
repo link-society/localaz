@@ -4,24 +4,11 @@ description: "Entities, $filter queries, and ETag concurrency."
 weight: 3
 ---
 
-Azure Table Storage emulation (api-version `2019-02-02`) over the OData JSON
-wire format. Compatible with the `aztables` SDK and the `az storage table` /
-`az storage entity` CLI commands.
-
-## Endpoint
-
-| | |
-| --- | --- |
-| URL | `http://127.0.0.1:10002/devstoreaccount1` |
-| Protocol | HTTP / REST (OData JSON) |
-| Persisted | Yes — state lives under `/data` |
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-table-addr` | `LOCALAZ_TABLE_ADDR` | `:10002` |
-| `-data` | `LOCALAZ_DATA_DIR` | `/data` |
+Azure Table Storage (api-version `2019-02-02`) over the OData JSON wire format,
+served at `http://127.0.0.1:10002/devstoreaccount1` and compatible with the
+`aztables` SDK and the `az storage table` / `az storage entity` commands. Table
+state is persisted under `/data`. See [Configuration](/configuration) to change
+ports, addresses, and the data directory.
 
 ## Supported operations
 
@@ -35,46 +22,69 @@ wire format. Compatible with the `aztables` SDK and the `az storage table` /
 | Merge | `PATCH` / `MERGE /{account}/{table}(...)` |
 | Delete Entity | `DELETE /{account}/{table}(...)` |
 
-Supported semantics: server-managed `Timestamp` and weak `odata.etag`,
-optimistic concurrency via `If-Match` (`*` matches any), upsert (insert when
-absent), `Prefer: return-no-content`, and the `$filter`, `$select`, `$top`
-query options.
+Server-managed `Timestamp` and weak `odata.etag`, optimistic concurrency via
+`If-Match`, upsert, and the `$filter` (`eq` `ne` `gt` `ge` `lt` `le`, `and`/`or`,
+parentheses), `$select`, and `$top` query options are supported.
 
-`$filter` supports the comparison operators (`eq`, `ne`, `gt`, `ge`, `lt`, `le`)
-over string/number/bool literals, combined with `and`/`or` and parentheses.
-
-**Not yet implemented:** batch transactions, typed `$filter` literals and OData
+**Not implemented:** batch transactions, typed `$filter` literals and OData
 functions, continuation tokens, and Shared Key signature verification.
 
-## Example: Go SDK
-
-```go
-connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
-svc, _ := aztables.NewServiceClientFromConnectionString(connStr, nil)
-table := svc.NewClient("people")
-
-ctx := context.Background()
-table.CreateTable(ctx, nil)
-
-entity := aztables.EDMEntity{
-    Entity:     aztables.Entity{PartitionKey: "team", RowKey: "alice"},
-    Properties: map[string]any{"Name": "Alice"},
-}
-b, _ := json.Marshal(entity)
-table.AddEntity(ctx, b, nil)
-
-pager := table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
-    Filter: to.Ptr("PartitionKey eq 'team'"),
-})
-```
-
-## Example: Azure CLI
+## Azure CLI
 
 ```bash
-# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
+export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
 
 az storage table create --name people
-az storage entity insert --table-name people \
-  --entity PartitionKey=team RowKey=alice Name=Alice
+az storage entity insert --table-name people --entity PartitionKey=team RowKey=alice Name=Alice
+az storage entity show --table-name people --partition-key team --row-key alice
 az storage entity query --table-name people --filter "PartitionKey eq 'team'"
+az storage entity delete --table-name people --partition-key team --row-key alice
+```
+
+## Go SDK
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+)
+
+func main() {
+	ctx := context.Background()
+	svc, err := aztables.NewServiceClientWithNoCredential("http://127.0.0.1:10002/devstoreaccount1", nil)
+	if err != nil {
+		panic(err)
+	}
+
+	svc.CreateTable(ctx, "people", nil)
+	table := svc.NewClient("people")
+
+	entity, _ := json.Marshal(aztables.EDMEntity{
+		Entity:     aztables.Entity{PartitionKey: "team", RowKey: "alice"},
+		Properties: map[string]any{"Name": "Alice", "Count": 3},
+	})
+	table.AddEntity(ctx, entity, nil)
+
+	resp, err := table.GetEntity(ctx, "team", "alice", nil)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(resp.Value))
+
+	pager := table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
+		Filter: to.Ptr("PartitionKey eq 'team'"),
+	})
+	for pager.More() {
+		page, _ := pager.NextPage(ctx)
+		fmt.Println(len(page.Entities))
+	}
+
+	table.DeleteEntity(ctx, "team", "alice", nil)
+}
 ```

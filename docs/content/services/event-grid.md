@@ -4,22 +4,10 @@ description: "Namespace topics with pull delivery."
 weight: 4
 ---
 
-Azure Event Grid emulation — namespace topics with **pull delivery**
-(api-version `2024-06-01`). Compatible with the `aznamespaces` SDK.
-
-## Endpoint
-
-| | |
-| --- | --- |
-| URL | `http://127.0.0.1:10003` |
-| Protocol | HTTP / REST |
-| Persisted | No — state is in-memory |
-
-## Configuration
-
-| Flag | Environment variable | Default |
-| ---- | -------------------- | ------- |
-| `-eventgrid-addr` | `LOCALAZ_EVENTGRID_ADDR` | `:10003` |
+Azure Event Grid namespace topics with **pull delivery** (api-version
+`2024-06-01`), served at `http://127.0.0.1:10003` and compatible with the
+`aznamespaces` SDK. State is in-memory; topics and subscriptions are created on
+first use. See [Configuration](/configuration) to change the listen address.
 
 ## Supported operations
 
@@ -32,30 +20,56 @@ Azure Event Grid emulation — namespace topics with **pull delivery**
 | Reject | `POST /topics/{topic}/eventsubscriptions/{sub}:reject` |
 | Renew Locks | `POST /topics/{topic}/eventsubscriptions/{sub}:renewLock` |
 
-CloudEvents are stored and echoed back verbatim (single and batch). Topics and
-subscriptions are created on first use. Pull delivery uses lock tokens and
-delivery counts, with acknowledge/release/reject settlement.
+CloudEvents are stored and echoed back verbatim (single and batch). Pull
+delivery uses lock tokens and delivery counts, with acknowledge / release /
+reject settlement.
 
-> Event Grid is **SDK-only**: `az eventgrid` is an ARM management-plane command,
-> so there is no CLI data-plane publish/receive surface to redirect to localaz.
+**Not implemented:** push delivery, event domains, filtering, and dead-lettering.
 
-## Example: Go SDK
+## Azure CLI
+
+Event Grid has no data-plane CLI surface (`az eventgrid` is management-plane
+only), so publish and receive are **SDK-only** — use the Go example below.
+
+## Go SDK
 
 ```go
-const endpoint = "http://127.0.0.1:10003"
-sender, _ := aznamespaces.NewSenderClient(endpoint, "my-topic", cred, nil)
+package main
 
-event, _ := messaging.NewCloudEvent("source", "type", map[string]string{"k": "v"}, nil)
-sender.SendEvent(ctx, &event, nil)
+import (
+	"context"
+	"fmt"
 
-receiver, _ := aznamespaces.NewReceiverClient(endpoint, "my-topic", "sub1", cred, nil)
-resp, _ := receiver.ReceiveEvents(ctx, nil)
-for _, d := range resp.Details {
-    receiver.AcknowledgeEvents(ctx, []string{*d.BrokerProperties.LockToken}, nil)
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/messaging"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
+)
+
+func main() {
+	const endpoint = "http://127.0.0.1:10003"
+	ctx := context.Background()
+	cred := azcore.NewKeyCredential("localaz-dev-key")
+
+	sender, err := aznamespaces.NewSenderClientWithSharedKeyCredential(endpoint, "orders", cred, nil)
+	if err != nil {
+		panic(err)
+	}
+	event, _ := messaging.NewCloudEvent("/orders/api", "Order.Placed",
+		map[string]string{"orderId": "A-1001", "status": "placed"}, nil)
+	sender.SendEvent(ctx, &event, nil)
+
+	receiver, err := aznamespaces.NewReceiverClientWithSharedKeyCredential(endpoint, "orders", "fulfillment", cred, nil)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := receiver.ReceiveEvents(ctx, &aznamespaces.ReceiveEventsOptions{MaxEvents: to.Ptr[int32](5)})
+	if err != nil {
+		panic(err)
+	}
+	for _, d := range resp.Details {
+		fmt.Println(d.Event.Type)
+		receiver.AcknowledgeEvents(ctx, []string{*d.BrokerProperties.LockToken}, nil)
+	}
 }
 ```
-
-## Example: Azure CLI
-
-Not applicable — Event Grid has no CLI data-plane commands that can be pointed
-at a local endpoint. Use the Go SDK example above.

@@ -10,7 +10,7 @@ It currently emulates parts of the following services:
  - Queue Storage
  - Table Storage
  - Event Grid
- - WebSocket PubSub
+ - Web PubSub
  - Service Bus
  - Monitor Logs
  - Entra ID (AAD) + Resource Manager (ARM) control plane
@@ -27,12 +27,12 @@ The services are then available at:
 
 | Service          | Endpoint                                   |
 | ---------------- | ------------------------------------------ |
-| Blob             | `http://127.0.0.1:10000/devstoreaccount1`  |
-| Queue            | `http://127.0.0.1:10001/devstoreaccount1`  |
-| Table            | `http://127.0.0.1:10002/devstoreaccount1`  |
+| Blob Storage     | `http://127.0.0.1:10000/devstoreaccount1`  |
+| Queue Storage    | `http://127.0.0.1:10001/devstoreaccount1`  |
+| Table Storage    | `http://127.0.0.1:10002/devstoreaccount1`  |
 | Event Grid       | `http://127.0.0.1:10003`                   |
 | Web PubSub       | `http://127.0.0.1:10004`                   |
-| Monitor Logs     | `http://127.0.0.1:10005`                   |
+| Monitor Logs     | `https://127.0.0.1:10005`                  |
 | Entra ID         | `https://127.0.0.1:10006`                  |
 | Resource Manager | `https://127.0.0.1:10007`                  |
 | Service Bus      | `sb://127.0.0.1:5672` (AMQP)               |
@@ -56,8 +56,8 @@ az storage entity insert --table-name people --entity PartitionKey=team RowKey=a
 ### Usage with the Go SDK
 
 ```go
-connStr := "UseDevelopmentStorage=true"
-client, _ := azblob.NewClientFromConnectionString(connStr, nil)
+client, _ := azblob.NewClientWithNoCredential("http://127.0.0.1:10000/devstoreaccount1", nil)
+client.CreateContainer(ctx, "demo", nil)
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
 ```
 
