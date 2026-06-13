@@ -59,7 +59,7 @@ internal/utils/devcert               self-signed TLS material for the control pl
 test/sdk                       integration tests via the Azure Go SDKs (+ README.md)
 test/cli                       end-to-end tests via the Azure CLI, build tag: cli (+ README.md)
 test/README.md                 test-suite architecture overview
-docker/                        localaz.dockerfile, docker-compose.dev.yml
+docker/                        localaz.dockerfile
 docs/                          Hugo documentation site (content/, layouts/, static/)
 ```
 
@@ -116,7 +116,6 @@ task test:unit    # go test ./...  (Go SDK suite, self-contained)
 task test:cli     # go test -tags cli ./test/cli/...  (requires az)
 task lint         # gofmt check + go vet
 task docker:build # build the container image
-task docker:up    # docker compose -f docker/docker-compose.dev.yml up --build
 ```
 
 The CLI suite shells out to the real `az` CLI and is guarded by the `cli` build
