@@ -1,6 +1,7 @@
 // Command localaz runs the localaz Azure emulator. A single process exposes
-// each emulated Azure service on its own listener (mirroring Azurite's
-// multi-port layout) so that users only ever run one container.
+// each emulated Azure service on its own listener (mirroring the well-known
+// local development storage multi-port layout) so that users only ever run
+// one container.
 package main
 
 import (

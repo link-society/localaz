@@ -101,7 +101,7 @@ func setup() (func(), error) {
 	tableEndpoint = fmt.Sprintf("http://%s/%s", tableAddr, account)
 
 	// Bind the services we do not exercise to ephemeral ports so the suite
-	// never collides with a real Azurite or a previous run.
+	// never collides with another emulator or a previous run.
 	srv := exec.Command(bin,
 		"-addr", blobAddr,
 		"-queue-addr", queueAddr,

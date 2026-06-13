@@ -69,9 +69,9 @@ docs/                          Hugo documentation site (content/, layouts/, stat
 | Resource Mgr| `10007` | HTTP/REST (HTTPS) | `-arm-addr` / `LOCALAZ_ARM_ADDR`                 |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
-The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
-tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
-`UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
+The blob flag is still `-addr` (not `-blob-addr`) for back-compat with existing
+dev-storage tooling; do not rename it. Blob, Queue and Table deliberately occupy
+the well-known development storage ports (`10000`/`10001`/`10002`), which is why the
 pub/sub services moved to `10003`/`10004`/`10005` and the control plane (AAD,
 ARM) to `10006`/`10007`. The control-plane ports serve HTTPS when TLS is
 enabled (`-tls-auto`, or `-tls-cert`/`-tls-key`).
@@ -149,15 +149,6 @@ same image.
   the remaining buffer, and `readFrame` rejects frames larger than the
   advertised 64 KiB max-frame-size (`maxFrameSize` in `frame.go`, the single
   source of truth shared with `conn.onOpen`); otherwise a ~12-byte crafted frame
-  could trigger an unauthenticated multi-GB allocation / OOM.
-- **Web PubSub connections never block the hub.** Each `wsConn` owns a buffered
-  outbound channel drained by a dedicated writer goroutine; `send` is a
-  non-blocking enqueue (`select`/`default`). The hub holds only an `RLock` while
-  fanning out, so a slow/stalled client can never stall a broadcast or block
-  add/remove/join/leave. If the outbound buffer fills, that connection is
-  dropped (`closeNow`) rather than slowing the producer. Inbound frames are
-  size-limited via `SetReadLimit` (1 MiB). The socket is accessed through the
-  `wsSocket` interface so it can be stubbed in tests.
   could trigger an unauthenticated multi-GB allocation / OOM. **Sender credit is
   replenished** as transfers are consumed: on attach the server grants
   `senderInitialCredit` (`link.go`), and `onTransfer` re-grants a flow every
@@ -169,6 +160,14 @@ same image.
   only relays the message to the broker and settles once, on the final frame
   (`more` false/absent) — otherwise a body split across frames (large messages or
   a small max-frame-size) would be delivered as several corrupted fragments.
+- **Web PubSub connections never block the hub.** Each `wsConn` owns a buffered
+  outbound channel drained by a dedicated writer goroutine; `send` is a
+  non-blocking enqueue (`select`/`default`). The hub holds only an `RLock` while
+  fanning out, so a slow/stalled client can never stall a broadcast or block
+  add/remove/join/leave. If the outbound buffer fills, that connection is
+  dropped (`closeNow`) rather than slowing the producer. Inbound frames are
+  size-limited via `SetReadLimit` (1 MiB). The socket is accessed through the
+  `wsSocket` interface so it can be stubbed in tests.
 - **Pub/sub state is in-memory.** Event Grid, Web PubSub, Service Bus, and
   Monitor Logs do not persist — their traffic is transient, so there is no
   `/data` format for them. The AAD/ARM control plane is in-memory too (one
@@ -209,7 +208,7 @@ same image.
   type is not comparable to the literal's type), evaluates to false for *all*
   operators including `ne`: a `$filter` selects only entities that have the
   property and satisfy the comparison, so `Status ne 'active'` does not match an
-  entity that has no `Status` at all. Note that Azure and Azurite are themselves
+  entity that has no `Status` at all. Note that Azure itself is
   inconsistent/buggy on null/missing-property filters, so this is a deliberate,
   documented choice rather than verified Azure parity. The recursive-descent
   parser caps parenthesis nesting at `maxFilterDepth` (64) so attacker-supplied

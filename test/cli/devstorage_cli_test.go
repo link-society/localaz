@@ -16,11 +16,11 @@ import (
 // AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" — actually
 // drives the Azure CLI against localaz end to end.
 //
-// The CLI/SDK expand that shorthand internally to Azurite's fixed development
+// The CLI/SDK expand that shorthand internally to the fixed development storage
 // endpoints on ports 10000/10001/10002, so this test runs a dedicated emulator
 // bound to those ports (every other service goes to an ephemeral port to avoid
 // colliding with the main suite's emulator). It skips when any of the three
-// dev ports is already in use — e.g. a real Azurite or another localaz — so it
+// dev ports is already in use — e.g. another emulator or another localaz — so it
 // never fights for a busy port.
 func TestUseDevelopmentStorageShorthand(t *testing.T) {
 	for _, port := range []int{10000, 10001, 10002} {
