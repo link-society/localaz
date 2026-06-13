@@ -48,7 +48,7 @@ func TestControlPlaneCLI(t *testing.T) {
 		"-monitor-addr", monitorAddr,
 		"-aad-addr", aadAddr,
 		"-arm-addr", armAddr,
-		"-addr", "127.0.0.1:0",
+		"-blob-addr", "127.0.0.1:0",
 		"-queue-addr", "127.0.0.1:0",
 		"-table-addr", "127.0.0.1:0",
 		"-eventgrid-addr", "127.0.0.1:0",

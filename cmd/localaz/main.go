@@ -39,7 +39,7 @@ import (
 )
 
 func main() {
-	blobAddr := flag.String("addr", envOr("LOCALAZ_BLOB_ADDR", ":10000"), "blob service listen address")
+	blobAddr := flag.String("blob-addr", envOr("LOCALAZ_BLOB_ADDR", ":10000"), "blob service listen address")
 	queueAddr := flag.String("queue-addr", envOr("LOCALAZ_QUEUE_ADDR", ":10001"), "queue service listen address")
 	tableAddr := flag.String("table-addr", envOr("LOCALAZ_TABLE_ADDR", ":10002"), "table service listen address")
 	eventGridAddr := flag.String("eventgrid-addr", envOr("LOCALAZ_EVENTGRID_ADDR", ":10003"), "event grid service listen address")

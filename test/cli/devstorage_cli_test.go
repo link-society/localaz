@@ -43,7 +43,7 @@ func TestUseDevelopmentStorageShorthand(t *testing.T) {
 	}
 
 	srv := exec.Command(bin,
-		"-addr", "127.0.0.1:10000",
+		"-blob-addr", "127.0.0.1:10000",
 		"-queue-addr", "127.0.0.1:10001",
 		"-table-addr", "127.0.0.1:10002",
 		"-eventgrid-addr", "127.0.0.1:0",

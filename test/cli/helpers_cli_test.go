@@ -103,7 +103,7 @@ func setup() (func(), error) {
 	// Bind the services we do not exercise to ephemeral ports so the suite
 	// never collides with a real Azurite or a previous run.
 	srv := exec.Command(bin,
-		"-addr", blobAddr,
+		"-blob-addr", blobAddr,
 		"-queue-addr", queueAddr,
 		"-table-addr", tableAddr,
 		"-eventgrid-addr", "127.0.0.1:0",
