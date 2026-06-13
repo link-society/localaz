@@ -9,6 +9,7 @@ It currently emulates parts of the following services:
  - Blob Storage
  - Queue Storage
  - Table Storage
+ - Key Vault
  - Event Grid
  - Web PubSub
  - Service Bus
@@ -30,12 +31,13 @@ The services are then available at:
 | Blob Storage     | `https://127.0.0.1:10000/devstoreaccount1` |
 | Queue Storage    | `https://127.0.0.1:10001/devstoreaccount1` |
 | Table Storage    | `https://127.0.0.1:10002/devstoreaccount1` |
+| Key Vault        | `https://127.0.0.1:10008`                  |
 | Event Grid       | `https://127.0.0.1:10003`                  |
 | Web PubSub       | `https://127.0.0.1:10004`                  |
+| Service Bus      | `sb://127.0.0.1:5672` (AMQP)               |
 | Monitor Logs     | `https://127.0.0.1:10005`                  |
 | Entra ID         | `https://127.0.0.1:10006`                  |
 | Resource Manager | `https://127.0.0.1:10007`                  |
-| Service Bus      | `sb://127.0.0.1:5672` (AMQP)               |
 
 ### Usage with the Azure CLI
 

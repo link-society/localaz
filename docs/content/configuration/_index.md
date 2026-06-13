@@ -14,6 +14,7 @@ weight: 4
 | Web PubSub | `-webpubsub-addr` | `LOCALAZ_WEBPUBSUB_ADDR` | `:10004` |
 | Service Bus | `-servicebus-addr` | `LOCALAZ_SERVICEBUS_ADDR` | `:5672` |
 | Monitor Logs | `-monitor-addr` | `LOCALAZ_MONITOR_ADDR` | `:10005` |
+| Key Vault | `-keyvault-addr` | `LOCALAZ_KEYVAULT_ADDR` | `:10008` |
 
 ## Control Plane Configuration
 

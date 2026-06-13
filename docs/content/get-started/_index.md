@@ -11,7 +11,7 @@ You'll need to port-map all the service ports from the Docker container:
 docker run --name localaz \
   -p 10000:10000 -p 10001:10001 -p 10002:10002 \
   -p 10003:10003 -p 10004:10004 -p 10005:10005 \
-  -p 10006:10006 -p 10007:10007 -p 5672:5672 \
+  -p 10006:10006 -p 10007:10007 -p 10008:10008 -p 5672:5672 \
   -v ./localaz-data:/data \
   linksociety/localaz:latest
 ```
@@ -34,6 +34,7 @@ Once running, the services are available at:
 | [Monitor Logs](/services/monitor-logs) | `https://127.0.0.1:10005` |
 | [Entra ID](/services/control-plane) | `https://127.0.0.1:10006` |
 | [Resource Manager](/services/control-plane) | `https://127.0.0.1:10007` |
+| [Key Vault](/services/key-vault) | `https://127.0.0.1:10008` |
 
 ## Usage
 

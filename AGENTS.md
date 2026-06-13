@@ -44,16 +44,14 @@ internal/servers/wpsserver     Web PubSub (REST + WebSocket)
 internal/servers/sbserver      Service Bus AMQP 1.0 (hand-rolled framing/codec)
 internal/servers/monitorserver Monitor Logs REST (ingestion + KQL-subset query)
 internal/servers/aadserver     Entra ID (AAD): OIDC discovery, JWKS, RS256 JWT tokens
-internal/servers/armserver     Resource Manager: cloud metadata, subscriptions, groups
-internal/stores/blobstore      storage abstraction (the Store interface) + types
+internal/servers/armserver     Resource Manager: cloud metadata, subscriptions, groupsinternal/servers/kvserver       Key Vault secrets (REST + challenge auth)internal/stores/blobstore      storage abstraction (the Store interface) + types
   └── fsstore                  filesystem-backed implementation
 internal/stores/queuestore     in-memory queue/message state + JSON persistence
 internal/stores/tablestore     in-memory entity state + JSON persistence
 internal/stores/egstore        in-memory Event Grid pub/sub state
 internal/stores/sbstore        in-memory Service Bus broker
 internal/stores/monitorstore   in-memory Monitor Logs tables
-internal/stores/armstore       in-memory ARM state (one subscription/tenant + groups + generic resources)
-internal/utils/httpx           shared HTTP helpers
+internal/stores/armstore       in-memory ARM state (one subscription/tenant + groups + generic resources)internal/stores/keyvaultstore  in-memory Key Vault secrets + JSON persistenceinternal/utils/httpx           shared HTTP helpers
 internal/utils/azwire          shared Azure wire-format helpers
 internal/utils/azerr           faithful Azure error responses
 internal/utils/atomicfile      crash-safe file writes (temp + fsync + rename + dir fsync)
@@ -77,16 +75,17 @@ docs/                          Hugo documentation site (content/, layouts/, stat
 | Monitor Logs| `10005` | HTTP/REST         | `-monitor-addr` / `LOCALAZ_MONITOR_ADDR`         |
 | Entra ID    | `10006` | HTTP/REST (HTTPS) | `-aad-addr` / `LOCALAZ_AAD_ADDR`                 |
 | Resource Mgr| `10007` | HTTP/REST (HTTPS) | `-arm-addr` / `LOCALAZ_ARM_ADDR`                 |
+| Key Vault   | `10008` | HTTP/REST (HTTPS) | `-keyvault-addr` / `LOCALAZ_KEYVAULT_ADDR`       |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
 The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
 tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
 `UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
 pub/sub services moved to `10003`/`10004`/`10005` and the control plane (AAD,
-ARM) to `10006`/`10007`. Every HTTP service is served over TLS — localaz
-auto-generates a self-signed cert (`<data>/tls/localaz.{crt,key}`) on startup
-unless you supply `-tls-cert`/`-tls-key`. Service Bus (AMQP) is the only
-plaintext listener.
+ARM) to `10006`/`10007` with Key Vault on `10008`. Every HTTP service is served
+over TLS — localaz auto-generates a self-signed cert
+(`<data>/tls/localaz.{crt,key}`) on startup unless you supply
+`-tls-cert`/`-tls-key`. Service Bus (AMQP) is the only plaintext listener.
 
 ## Conventions
 
@@ -387,3 +386,26 @@ same image.
   never touches the developer's real clouds/logins, but points
   `AZURE_EXTENSION_DIR` at the real extension dir for the `log-analytics`
   command (skips if that extension is absent).
+
+## Key Vault gotchas
+
+- **Challenge auth is required, not optional.** `kvserver` answers an
+  unauthenticated request with `401` + a `WWW-Authenticate: Bearer
+  authorization="<aad-authority>/adfs", resource="https://vault.azure.net"`
+  header. The `azsecrets` SDK relies on this handshake to learn the token
+  scope/tenant AND to re-attach a request body it strips on the first probe — so
+  without the 401 a `Set Secret` would arrive with an empty body. The token is
+  accepted but never validated (opt-in only, like Shared Key / CBS).
+- **Clients must disable challenge-resource verification.** The emulator host is
+  an `IP:port`, which can't satisfy the SDK's `*.vault.azure.net` resource check,
+  so callers set `DisableChallengeResourceVerification: true` (the SDK test and
+  docs do). Key Vault is therefore **SDK-only** — `az keyvault secret` derives
+  the vault host from `--vault-name` + the cloud's Key Vault DNS suffix and
+  verifies the challenge resource, neither of which fits the emulator; no CLI
+  test.
+- **Secrets persist; deletes are hard.** State is one JSON snapshot
+  (`<data>/keyvault/secrets.json`) written via `atomicfile`, namespaced by vault
+  host. A secret value is immutable (`PUT` always mints a new version and makes
+  it current; `PATCH` only touches attributes/content-type/tags).
+  `recoveryLevel` is `Purgeable` — Delete removes all versions with no
+  soft-delete / recover / purge (KISS).
