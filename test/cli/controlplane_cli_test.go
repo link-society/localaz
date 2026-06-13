@@ -53,6 +53,7 @@ func TestControlPlaneCLI(t *testing.T) {
 		"-eventgrid-addr", "127.0.0.1:0",
 		"-webpubsub-addr", "127.0.0.1:0",
 		"-servicebus-addr", "127.0.0.1:0",
+		"-keyvault-addr", "127.0.0.1:0",
 		"-data", dataDir,
 	)
 	srv.Stdout, srv.Stderr = os.Stdout, os.Stderr
