@@ -68,21 +68,6 @@ tasks:
     cmds:
       - docker build -f docker/localaz.dockerfile -t {{.IMAGE}} .
 
-  docker:up:
-    desc: Start the dev container in the background
-    cmds:
-      - "{{.COMPOSE}} up --build -d"
-
-  docker:down:
-    desc: Stop and remove the dev container
-    cmds:
-      - "{{.COMPOSE}} down"
-
-  docker:logs:
-    desc: Tail the dev container logs
-    cmds:
-      - "{{.COMPOSE}} logs -f"
-
   docs:build:
     desc: Build the Hugo documentation site (output in docs/public)
     dir: docs
@@ -94,12 +79,6 @@ tasks:
     dir: docs
     cmds:
       - hugo server --buildDrafts --disableFastRender
-
-  env:conn-string:
-    desc: Print the AZURE_STORAGE_CONNECTION_STRING export line (use with eval)
-    silent: true
-    cmds:
-      - echo 'export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"'
 
   clean:
     desc: Remove build artifacts and local state
