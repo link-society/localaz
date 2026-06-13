@@ -48,6 +48,13 @@ functions, continuation tokens, and Shared Key signature verification.
 
 ## Example: Go SDK
 
+**Prerequisites:** export `AZURE_STORAGE_CONNECTION_STRING` so the SDK points at
+the Table endpoint above — see the [Get Started guide](../../get-started/).
+
+`AddEntity` takes the entity as raw JSON bytes, so build an `aztables.EDMEntity`
+and `json.Marshal` it before sending. This walks through create, insert, read
+back, and a filtered list:
+
 ```go
 connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
 svc, _ := aztables.NewServiceClientFromConnectionString(connStr, nil)
@@ -58,23 +65,35 @@ table.CreateTable(ctx, nil)
 
 entity := aztables.EDMEntity{
     Entity:     aztables.Entity{PartitionKey: "team", RowKey: "alice"},
-    Properties: map[string]any{"Name": "Alice"},
+    Properties: map[string]any{"Name": "Alice", "Count": 3},
 }
 b, _ := json.Marshal(entity)
 table.AddEntity(ctx, b, nil)
+
+// Read the entity back by its PartitionKey / RowKey.
+resp, _ := table.GetEntity(ctx, "team", "alice", nil)
+var got aztables.EDMEntity
+json.Unmarshal(resp.Value, &got)
+// got.Properties["Name"] == "Alice", got.Properties["Count"] == 3
 
 pager := table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
     Filter: to.Ptr("PartitionKey eq 'team'"),
 })
 ```
 
+The filtered pager returns the single `alice` entity inserted above.
+
 ## Example: Azure CLI
 
-```bash
-# Export AZURE_STORAGE_CONNECTION_STRING first — see the Get Started guide.
+**Prerequisites:** export `AZURE_STORAGE_CONNECTION_STRING` so the CLI targets
+the Table endpoint above — see the [Get Started guide](../../get-started/).
 
+```bash
 az storage table create --name people
 az storage entity insert --table-name people \
   --entity PartitionKey=team RowKey=alice Name=Alice
 az storage entity query --table-name people --filter "PartitionKey eq 'team'"
 ```
+
+The final `query` lists the entities matching the filter — here the single
+`alice` row in the `team` partition.

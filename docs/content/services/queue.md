@@ -44,19 +44,30 @@ TTL with eviction on access), and dequeue counts.
 
 ## Example: Go SDK
 
+**Prerequisites:** export `AZURE_STORAGE_CONNECTION_STRING` first — see
+[Get Started](../../get-started/).
+
 ```go
+// Connect to localaz at http://127.0.0.1:10001/devstoreaccount1 via the
+// connection string, then send, receive, and delete one message.
 connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
 client, _ := azqueue.NewServiceClientFromConnectionString(connStr, nil)
 queue := client.NewQueueClient("work-items")
 
 ctx := context.Background()
 queue.Create(ctx, nil)
-queue.EnqueueMessage(ctx, "hello", nil)
+queue.EnqueueMessage(ctx, "hello queue", nil)
 
+// DequeueMessage hides the message (visibility timeout) and returns a pop
+// receipt; deleting with that receipt removes it for good.
 resp, _ := queue.DequeueMessage(ctx, nil)
 msg := resp.Messages[0]
+fmt.Println(*msg.MessageText) // prints: hello queue
 queue.DeleteMessage(ctx, *msg.MessageID, *msg.PopReceipt, nil)
 ```
+
+After the delete, the queue is empty: a follow-up dequeue or peek returns zero
+messages.
 
 ## Example: Azure CLI
 

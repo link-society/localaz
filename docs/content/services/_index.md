@@ -27,4 +27,4 @@ variable; flags take precedence. The shared data directory flag is `-data` /
 | Service Bus | `-servicebus-addr` | `LOCALAZ_SERVICEBUS_ADDR` | `:5672` |
 
 > The Blob flag is `-addr` (not `-blob-addr`) for compatibility with existing
-> Azurite tooling.
+> dev-storage tooling.

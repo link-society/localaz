@@ -50,17 +50,58 @@ sessions, and lock renewal.
 
 ## Example: Go SDK
 
+**Prerequisites:** localaz running with Service Bus on `sb://127.0.0.1:5672`, and
+the `github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus` module
+installed.
+
+The `UseDevelopmentEmulator=true` flag in the connection string is required: it
+tells the SDK to use the local emulator's plain TCP / anonymous SASL transport
+instead of attempting a TLS handshake.
+
 ```go
-const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true"
-client, _ := azservicebus.NewClientFromConnectionString(connStr, nil)
+package main
 
-sender, _ := client.NewSender("myqueue", nil)
-sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello")}, nil)
+import (
+	"context"
+	"fmt"
+	"time"
 
-receiver, _ := client.NewReceiverForQueue("myqueue", nil)
-msgs, _ := receiver.ReceiveMessages(ctx, 1, nil)
-receiver.CompleteMessage(ctx, msgs[0], nil)
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus"
+)
+
+func main() {
+	const connStr = "Endpoint=sb://127.0.0.1:5672;SharedAccessKeyName=test;SharedAccessKey=test;UseDevelopmentEmulator=true"
+
+	client, err := azservicebus.NewClientFromConnectionString(connStr, nil)
+	if err != nil {
+		panic(err)
+	}
+	defer client.Close(context.Background())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Send a message to the queue (auto-created on first use).
+	sender, _ := client.NewSender("myqueue", nil)
+	if err := sender.SendMessage(ctx, &azservicebus.Message{Body: []byte("hello service bus")}, nil); err != nil {
+		panic(err)
+	}
+	sender.Close(ctx)
+
+	// Receive it under peek-lock, then complete (settle) it.
+	receiver, _ := client.NewReceiverForQueue("myqueue", nil)
+	defer receiver.Close(ctx)
+	msgs, _ := receiver.ReceiveMessages(ctx, 1, nil)
+	fmt.Println(string(msgs[0].Body)) // hello service bus
+	receiver.CompleteMessage(ctx, msgs[0], nil)
+}
 ```
+
+Expected result: the message is sent to `myqueue`, received back as a single
+message whose body is `hello service bus`, and completed (removed from the
+queue). For topics, attach a `NewReceiverForSubscription(topic, sub)` receiver
+once before sending so the subscription exists, then send via
+`NewSender(topic)`; the message fans out to every registered subscription.
 
 ## Example: Azure CLI
 

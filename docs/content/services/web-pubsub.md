@@ -43,15 +43,35 @@ WebSocket are supported.
 
 ## Example: Go SDK
 
-```go
-const endpoint = "http://127.0.0.1:10004"
-client, _ := azwebpubsub.NewClientFromConnectionString(
-    "Endpoint=http://127.0.0.1:10004;AccessKey=test;", "hub1", nil)
+Prerequisites: localaz running with Web PubSub on `:10004`, and the
+`github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub` SDK installed.
 
-// Broadcast to every client connected to the hub.
-client.SendToAll(ctx, azwebpubsub.ContentTypeTextPlain,
-    streaming.NopCloser(strings.NewReader("hello everyone")), nil)
+```go
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
+    "github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub"
+)
+
+ctx := context.Background()
+
+// The endpoint is HTTP (Web PubSub serves no TLS); the AccessKey is signed
+// locally, so any non-empty value works.
+client, _ := azwebpubsub.NewClientFromConnectionString(
+    "Endpoint=http://127.0.0.1:10004;AccessKey=localaz-test-key;", nil)
+
+// Broadcast to every client connected to the hub. The hub name is the first
+// argument; SendToAll has no separate hub on the client.
+body, _ := json.Marshal(map[string]string{"text": "hello everyone"})
+client.SendToAll(ctx, "chat", azwebpubsub.ContentTypeApplicationJSON,
+    streaming.NopCloser(bytes.NewReader(body)), nil)
 ```
+
+Expected result: every WebSocket client connected to the `chat` hub receives
+the broadcast as a `message` frame (`from: "server"`) carrying the JSON payload.
 
 ## Example: Azure CLI
 

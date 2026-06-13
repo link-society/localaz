@@ -28,3 +28,11 @@ description = "A local Azure emulator — one Docker container, native Azure pro
   name = "Services"
   pageRef = "/services"
   weight = 3
+[[menus.main]]
+  name = "Architecture"
+  pageRef = "/architecture"
+  weight = 4
+[[menus.main]]
+  name = "Troubleshooting"
+  pageRef = "/troubleshooting"
+  weight = 5

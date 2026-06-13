@@ -22,8 +22,9 @@ Azure Blob Storage emulation: containers and block blobs over the native REST
 | `-addr` | `LOCALAZ_BLOB_ADDR` | `:10000` |
 | `-data` | `LOCALAZ_DATA_DIR` | `/data` |
 
-The Blob flag is `-addr` (not `-blob-addr`) for back-compat with Azurite. The
-port matches Azurite's `UseDevelopmentStorage=true` shorthand.
+The Blob flag is `-addr` (not `-blob-addr`) for back-compat with existing
+dev-storage tooling. Port `10000` matches the `UseDevelopmentStorage=true`
+shorthand expected by the SDKs and CLI.
 
 ## Supported operations
 
@@ -49,18 +50,37 @@ delete, tags, SAS, and Shared Key signature verification.
 
 ## Example: Go SDK
 
+**Prerequisites:** export `AZURE_STORAGE_CONNECTION_STRING` so the SDK points at
+localaz — see the [Get Started guide](../../get-started/).
+
+Required imports: `context`, `fmt`, `io`, `os`, and
+`github.com/Azure/azure-sdk-for-go/sdk/storage/azblob`. Every call takes a
+`context.Context`.
+
 ```go
 connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
-client, _ := azblob.NewClientFromConnectionString(connStr, nil)
+client, err := azblob.NewClientFromConnectionString(connStr, nil)
+if err != nil {
+	panic(err)
+}
 
 ctx := context.Background()
+
+// Creates the "demo" container. Returns an error if it already exists.
 client.CreateContainer(ctx, "demo", nil)
+
+// Uploads a block blob. The SDK auto-stages blocks for large buffers.
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
 
+// Downloads the blob; data holds the bytes written above.
 resp, _ := client.DownloadStream(ctx, "demo", "hello.txt", nil)
 data, _ := io.ReadAll(resp.Body)
-fmt.Println(string(data))
+resp.Body.Close()
+fmt.Println(string(data)) // prints: hi
 ```
+
+Expected result: the container and blob are created, the download returns the
+uploaded bytes, and the program prints `hi`.
 
 ## Example: Azure CLI
 
@@ -72,3 +92,6 @@ az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
 az storage blob list --container-name demo -o table
 az storage blob download --container-name demo --name hello.txt --file ./out.txt
 ```
+
+Expected result: the container is created, `hello.txt` is uploaded and appears in
+the listing, and `download` writes the same bytes back to `./out.txt`.

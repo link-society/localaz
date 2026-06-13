@@ -41,19 +41,50 @@ delivery counts, with acknowledge/release/reject settlement.
 
 ## Example: Go SDK
 
-```go
-const endpoint = "http://127.0.0.1:10003"
-sender, _ := aznamespaces.NewSenderClient(endpoint, "my-topic", cred, nil)
+**Prerequisites:** localaz running with Event Grid on `http://127.0.0.1:10003`.
 
-event, _ := messaging.NewCloudEvent("source", "type", map[string]string{"k": "v"}, nil)
+The emulator does not validate credentials, so any non-empty shared key works.
+Build a key credential with `azcore.NewKeyCredential` and pass it to the
+`WithSharedKeyCredential` client constructors. Topics and subscriptions are
+created on first use, so no setup call is needed.
+
+> **Transport note.** The `aznamespaces` SDK refuses to send a shared key over
+> plain HTTP, and localaz serves Event Grid over HTTP (port `10003`). To drive
+> it with this SDK, reach the endpoint over HTTPS — front it with a
+> TLS-terminating proxy and point the client there with a transport that trusts
+> the certificate. localaz's own suite exercises the protocol in-process this
+> way; see `test/sdk/eventgrid_delivery_test.go` for the pattern.
+
+```go
+import (
+    "context"
+
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore"
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/messaging"
+    "github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
+)
+
+const endpoint = "http://127.0.0.1:10003"
+
+ctx := context.Background()
+cred := azcore.NewKeyCredential("localaz-dev-key") // any non-empty key works
+
+sender, _ := aznamespaces.NewSenderClientWithSharedKeyCredential(endpoint, "my-topic", cred, nil)
+
+event, _ := messaging.NewCloudEvent("/orders/api", "Order.Placed", map[string]string{"orderId": "A-1001"}, nil)
 sender.SendEvent(ctx, &event, nil)
 
-receiver, _ := aznamespaces.NewReceiverClient(endpoint, "my-topic", "sub1", cred, nil)
+receiver, _ := aznamespaces.NewReceiverClientWithSharedKeyCredential(endpoint, "my-topic", "sub1", cred, nil)
 resp, _ := receiver.ReceiveEvents(ctx, nil)
 for _, d := range resp.Details {
     receiver.AcknowledgeEvents(ctx, []string{*d.BrokerProperties.LockToken}, nil)
 }
 ```
+
+**Behavior:** published events are stored on `my-topic` and returned by the next
+`ReceiveEvents` on `sub1`; acknowledging an event with its lock token settles it
+so it is not redelivered. (Reaching the SDK over HTTPS requires the transport
+note above.)
 
 ## Example: Azure CLI
 

@@ -1,5 +1,10 @@
 # localaz
 
+[![CI](https://github.com/link-society/localaz/actions/workflows/build.yml/badge.svg)](https://github.com/link-society/localaz/actions/workflows/build.yml)
+[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](LICENSE.txt)
+[![Docker Hub](https://img.shields.io/docker/v/linksociety/localaz?label=docker%20hub&sort=semver)](https://hub.docker.com/r/linksociety/localaz)
+[![Go version](https://img.shields.io/github/go-mod/go-version/link-society/localaz)](go.mod)
+
 A local **Azure emulator**, in the spirit of LocalStack (AWS) and localgcp
 (GCP). You run a single Docker container and point the **Azure CLI** or any
 **Azure SDK** at it — no code changes required.
@@ -42,13 +47,14 @@ The services are then available at:
 | Table       | `http://127.0.0.1:10002/devstoreaccount1`  |
 | Event Grid  | `http://127.0.0.1:10003`                   |
 | Web PubSub  | `http://127.0.0.1:10004`                   |
-| Monitor Logs| `http://127.0.0.1:10005`                   |
-| Entra ID    | `http://127.0.0.1:10006` (HTTPS with TLS)  |
-| Resource Mgr| `http://127.0.0.1:10007` (HTTPS with TLS)  |
+| Monitor Logs| `https://127.0.0.1:10005`                  |
+| Entra ID    | `https://127.0.0.1:10006`                  |
+| Resource Mgr| `https://127.0.0.1:10007`                  |
 | Service Bus | `sb://127.0.0.1:5672` (AMQP)               |
 
-Generate a connection string for your shell (matches Azurite's well-known
-development credentials, so existing tooling works unchanged):
+Generate a connection string for your shell (matches the well-known local
+development storage account credentials, so existing dev-storage tooling works
+unchanged):
 
 ```bash
 eval "$(task env:conn-string)"
@@ -121,6 +127,11 @@ task docker:up       # run the dev compose stack
 task docker:down     # stop the dev compose stack
 task env:conn-string # print an export line for the connection string
 ```
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set
+up a development environment, run the test suites, and open a pull request.
 
 ## Documentation
 
