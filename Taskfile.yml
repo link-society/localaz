@@ -1,12 +1,3 @@
-# Taskfile for localaz. See https://taskfile.dev
-#
-# Common commands:
-#   task build           build the binary
-#   task test:unit       run the Go SDK integration tests
-#   task test:cli        run the Azure CLI end-to-end tests
-#   task docker:up       start the dev container
-#   task docs:serve      preview the documentation site
-#   eval "$(task env:conn-string)"   export the connection string for `az`
 version: "3"
 
 vars:
@@ -17,7 +8,6 @@ vars:
   TABLE_PORT: "10002"
   IMAGE: localaz:dev
   BIN: ./out/localaz
-  COMPOSE: docker compose -f docker/docker-compose.dev.yml
 
 tasks:
   default:
