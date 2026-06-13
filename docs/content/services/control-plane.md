@@ -1,7 +1,7 @@
 ---
 title: "Control plane (Entra ID + ARM)"
 description: "Register localaz as a custom Azure cloud, sign in, and route data-plane commands."
-weight: 8
+weight: 9
 ---
 
 The **Entra ID (AAD)** and **Resource Manager (ARM)** emulators let the Azure

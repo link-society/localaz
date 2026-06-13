@@ -26,6 +26,7 @@ localaz provide partial support for the following services:
  - [Monitor Logs](/services/monitor-logs)
  - [Entra ID](/services/control-plane)
  - [Resource Manager](/services/control-plane)
+ - [Key Vault](/services/key-vault)
 
 ## Architecture
 
