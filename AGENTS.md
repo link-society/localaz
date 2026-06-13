@@ -2,6 +2,16 @@
 
 Guidance for AI agents and contributors working on localaz.
 
+## Golden rules
+
+These five rules are non-negotiable; never break them:
+
+- **Show, don't tell** — demonstrate with code, not comments or prose.
+- **Keep it simple, stupid (KISS).**
+- **You aren't gonna need it (YAGNI).**
+- **Less is better.**
+- **Don't repeat yourself (DRY).**
+
 ## Project overview
 
 localaz is a local **Azure emulator**: a single Go process (shipped as one
@@ -73,8 +83,10 @@ The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
 tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
 `UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
 pub/sub services moved to `10003`/`10004`/`10005` and the control plane (AAD,
-ARM) to `10006`/`10007`. The control-plane ports serve HTTPS when TLS is
-enabled (`-tls-auto`, or `-tls-cert`/`-tls-key`).
+ARM) to `10006`/`10007`. Every HTTP service is served over TLS — localaz
+auto-generates a self-signed cert (`<data>/tls/localaz.{crt,key}`) on startup
+unless you supply `-tls-cert`/`-tls-key`. Service Bus (AMQP) is the only
+plaintext listener.
 
 ## Conventions
 
@@ -306,10 +318,14 @@ same image.
 
 ## Control plane (AAD + ARM) gotchas
 
-- **TLS is mandatory for the control plane.** MSAL and azure-core refuse to
-  send bearer tokens over plain HTTP, so AAD/ARM/Monitor must serve HTTPS. Use
-  `-tls-auto` (writes `<data>/tls/localaz.{crt,key}`) or supply
-  `-tls-cert`/`-tls-key`. `http://` authorities are rejected outright by MSAL.
+- **TLS is always on (Service Bus excepted).** Every HTTP service serves
+  HTTPS: the Azure SDKs refuse to attach credentials over plain HTTP (bearer
+  tokens always; Event Grid's `KeyCredential`; storage Shared Key). localaz
+  auto-generates a self-signed cert (`<data>/tls/localaz.{crt,key}`) unless
+  `-tls-cert`/`-tls-key` are supplied; there is no plaintext mode and no
+  `-tls-auto` flag. `http://` authorities are rejected outright by MSAL.
+  Service Bus stays plain AMQP/TCP because `azservicebus` with
+  `UseDevelopmentEmulator=true` disables TLS and uses SASL ANONYMOUS.
 - **Auto cert SANs include `-advertise-host`.** `devcert.Generate(hosts...)`
   starts from the loopback defaults (`localhost`, `127.0.0.1`, `::1`) and adds
   the configured `-advertise-host`, so a hostname or non-loopback IP advertised

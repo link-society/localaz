@@ -16,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"localaz.dev/internal/utils/devcert"
 )
 
 const account = "devstoreaccount1"
@@ -35,11 +37,12 @@ func randomAccountKey() string {
 }
 
 // blobEndpoint, queueEndpoint and tableEndpoint are the storage endpoints under
-// test, resolved by TestMain.
+// test, resolved by TestMain. caCertPath is the PEM the CLI trusts for them.
 var (
 	blobEndpoint  string
 	queueEndpoint string
 	tableEndpoint string
+	caCertPath    string
 )
 
 func TestMain(m *testing.M) {
@@ -55,6 +58,10 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Setenv("AZURE_STORAGE_CONNECTION_STRING", connectionString())
+	if caCertPath != "" {
+		os.Setenv("REQUESTS_CA_BUNDLE", caCertPath)
+		os.Setenv("SSL_CERT_FILE", caCertPath)
+	}
 	code := m.Run()
 	stop()
 	os.Exit(code)
@@ -67,7 +74,8 @@ func setup() (func(), error) {
 		blobEndpoint = ep
 		queueEndpoint = os.Getenv("LOCALAZ_CLI_QUEUE_ENDPOINT")
 		tableEndpoint = os.Getenv("LOCALAZ_CLI_TABLE_ENDPOINT")
-		if err := waitForReady(blobEndpoint + "?comp=list"); err != nil {
+		caCertPath = os.Getenv("LOCALAZ_CLI_CA")
+		if err := waitForReadyClient(insecureClient(), blobEndpoint+"?comp=list"); err != nil {
 			return nil, err
 		}
 		return func() {}, nil
@@ -91,24 +99,40 @@ func setup() (func(), error) {
 		return nil, fmt.Errorf("build emulator: %w", err)
 	}
 
+	// localaz serves every HTTP service over TLS (the Azure CLI refuses to send
+	// credentials otherwise), so generate the cert ourselves: that way we know
+	// its path up front and can point the CLI's trust store at it.
+	certPath, keyPath, err := writeDevCert(tmp)
+	if err != nil {
+		os.RemoveAll(tmp)
+		return nil, err
+	}
+	caCertPath = certPath
+
 	blobAddr, queueAddr, tableAddr, err := threeFreeAddrs()
 	if err != nil {
 		os.RemoveAll(tmp)
 		return nil, err
 	}
-	blobEndpoint = fmt.Sprintf("http://%s/%s", blobAddr, account)
-	queueEndpoint = fmt.Sprintf("http://%s/%s", queueAddr, account)
-	tableEndpoint = fmt.Sprintf("http://%s/%s", tableAddr, account)
+	blobEndpoint = fmt.Sprintf("https://%s/%s", blobAddr, account)
+	queueEndpoint = fmt.Sprintf("https://%s/%s", queueAddr, account)
+	tableEndpoint = fmt.Sprintf("https://%s/%s", tableAddr, account)
 
-	// Bind the services we do not exercise to ephemeral ports so the suite
-	// never collides with a real Azurite or a previous run.
+	// Bind every service we do not exercise to an ephemeral port so the suite
+	// never collides with a real Azurite, the control-plane suite, or a previous
+	// run.
 	srv := exec.Command(bin,
 		"-blob-addr", blobAddr,
 		"-queue-addr", queueAddr,
 		"-table-addr", tableAddr,
 		"-eventgrid-addr", "127.0.0.1:0",
 		"-webpubsub-addr", "127.0.0.1:0",
+		"-monitor-addr", "127.0.0.1:0",
+		"-aad-addr", "127.0.0.1:0",
+		"-arm-addr", "127.0.0.1:0",
 		"-servicebus-addr", "127.0.0.1:0",
+		"-tls-cert", certPath,
+		"-tls-key", keyPath,
 		"-data", filepath.Join(tmp, "data"))
 	srv.Stdout, srv.Stderr = os.Stdout, os.Stderr
 	if err := srv.Start(); err != nil {
@@ -116,12 +140,13 @@ func setup() (func(), error) {
 		return nil, fmt.Errorf("start emulator: %w", err)
 	}
 
+	client := insecureClient()
 	for _, ready := range []string{
 		blobEndpoint + "?comp=list",
 		queueEndpoint + "?comp=list",
 		tableEndpoint + "/Tables",
 	} {
-		if err := waitForReady(ready); err != nil {
+		if err := waitForReadyClient(client, ready); err != nil {
 			_ = srv.Process.Kill()
 			os.RemoveAll(tmp)
 			return nil, err
@@ -133,6 +158,28 @@ func setup() (func(), error) {
 		_, _ = srv.Process.Wait()
 		os.RemoveAll(tmp)
 	}, nil
+}
+
+// writeDevCert generates the self-signed TLS material the emulator serves with
+// and writes it under tmp/tls, returning the certificate and key paths.
+func writeDevCert(tmp string) (certPath, keyPath string, err error) {
+	certPEM, keyPEM, err := devcert.Generate("127.0.0.1")
+	if err != nil {
+		return "", "", fmt.Errorf("generate dev cert: %w", err)
+	}
+	tlsDir := filepath.Join(tmp, "tls")
+	if err := os.MkdirAll(tlsDir, 0o755); err != nil {
+		return "", "", err
+	}
+	certPath = filepath.Join(tlsDir, "localaz.crt")
+	keyPath = filepath.Join(tlsDir, "localaz.key")
+	if err := os.WriteFile(certPath, certPEM, 0o600); err != nil {
+		return "", "", err
+	}
+	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
+		return "", "", err
+	}
+	return certPath, keyPath, nil
 }
 
 // threeFreeAddrs reserves three distinct loopback ports for the blob, queue and
@@ -160,24 +207,9 @@ func freePort() (int, error) {
 	return ln.Addr().(*net.TCPAddr).Port, nil
 }
 
-func waitForReady(url string) error {
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(url)
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return nil
-			}
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	return fmt.Errorf("emulator did not become ready at %s", url)
-}
-
 func connectionString() string {
 	return fmt.Sprintf(
-		"DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=%s;QueueEndpoint=%s;TableEndpoint=%s;",
+		"DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;BlobEndpoint=%s;QueueEndpoint=%s;TableEndpoint=%s;",
 		account, accountKey, blobEndpoint, queueEndpoint, tableEndpoint,
 	)
 }

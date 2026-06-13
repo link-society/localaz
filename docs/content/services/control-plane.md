@@ -14,8 +14,8 @@ State is in-memory: one fixed subscription and tenant, plus resource groups and
 generic resources created at runtime.
 
 **TLS is required** — MSAL and azure-core refuse bearer tokens over plain HTTP.
-Run localaz with `-tls-auto` and trust the generated certificate. See
-[Configuration](/configuration) for the TLS flags.
+localaz serves TLS by default; trust the self-signed certificate it writes to
+`<data>/tls/localaz.crt`. See [Configuration](/configuration) for the TLS flags.
 
 ## Supported operations
 
@@ -48,8 +48,9 @@ subscription / tenant management.
 
 ## Azure CLI
 
-Run localaz with `-tls-auto`, trust the generated certificate, then register the
-cloud. The registered name must equal `-arm-cloud-name` (default `localaz`):
+Trust the self-signed certificate localaz writes to `<data>/tls/localaz.crt`,
+then register the cloud. The registered name must equal `-arm-cloud-name`
+(default `localaz`):
 
 ```bash
 export REQUESTS_CA_BUNDLE=./localaz-data/tls/localaz.crt

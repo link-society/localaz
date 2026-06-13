@@ -27,11 +27,11 @@ The services are then available at:
 
 | Service          | Endpoint                                   |
 | ---------------- | ------------------------------------------ |
-| Blob Storage     | `http://127.0.0.1:10000/devstoreaccount1`  |
-| Queue Storage    | `http://127.0.0.1:10001/devstoreaccount1`  |
-| Table Storage    | `http://127.0.0.1:10002/devstoreaccount1`  |
-| Event Grid       | `http://127.0.0.1:10003`                   |
-| Web PubSub       | `http://127.0.0.1:10004`                   |
+| Blob Storage     | `https://127.0.0.1:10000/devstoreaccount1` |
+| Queue Storage    | `https://127.0.0.1:10001/devstoreaccount1` |
+| Table Storage    | `https://127.0.0.1:10002/devstoreaccount1` |
+| Event Grid       | `https://127.0.0.1:10003`                  |
+| Web PubSub       | `https://127.0.0.1:10004`                  |
 | Monitor Logs     | `https://127.0.0.1:10005`                  |
 | Entra ID         | `https://127.0.0.1:10006`                  |
 | Resource Manager | `https://127.0.0.1:10007`                  |
@@ -39,8 +39,23 @@ The services are then available at:
 
 ### Usage with the Azure CLI
 
+Trust localaz's certificate:
+
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
+Configure the connection string and run the CLI:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=${AZURE_STORAGE_KEY};BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=https://127.0.0.1:10001/devstoreaccount1;TableEndpoint=https://127.0.0.1:10002/devstoreaccount1;"
 
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
@@ -55,8 +70,23 @@ az storage entity insert --table-name people --entity PartitionKey=team RowKey=a
 
 ### Usage with the Go SDK
 
+Trust localaz's certificate and supply a Shared Key before running:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
 ```go
-client, _ := azblob.NewClientWithNoCredential("http://127.0.0.1:10000/devstoreaccount1", nil)
+connStr := "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;" +
+	"AccountKey=" + os.Getenv("AZURE_STORAGE_KEY") + ";" +
+	"BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;"
+client, _ := azblob.NewClientFromConnectionString(connStr, nil)
 client.CreateContainer(ctx, "demo", nil)
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
 ```

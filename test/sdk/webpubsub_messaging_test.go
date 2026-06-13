@@ -3,35 +3,23 @@ package sdk
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub"
-	"github.com/gorilla/websocket"
-
-	"localaz.dev/internal/servers/wpsserver"
 )
 
 // TestWebPubSubPublishToGroup exercises the full Web PubSub pub/sub path: a
 // WebSocket client joins a group, the official azwebpubsub service client
 // publishes to that group over REST, and the client receives the message.
 func TestWebPubSubPublishToGroup(t *testing.T) {
-	ts := httptest.NewServer(wpsserver.New())
-	defer ts.Close()
+	client, dialer := newWebPubSub(t)
 
 	const (
 		hub   = "chat"
 		group = "room1"
 	)
-
-	connStr := fmt.Sprintf("Endpoint=%s;AccessKey=localaz-test-key;", ts.URL)
-	client, err := azwebpubsub.NewClientFromConnectionString(connStr, nil)
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
 
 	access, err := client.GenerateClientAccessURL(ctx(t), hub, &azwebpubsub.GenerateClientAccessURLOptions{
 		Roles:  []string{"webpubsub.joinLeaveGroup", "webpubsub.sendToGroup"},
@@ -41,7 +29,6 @@ func TestWebPubSubPublishToGroup(t *testing.T) {
 		t.Fatalf("generate access url: %v", err)
 	}
 
-	dialer := websocket.Dialer{Subprotocols: []string{wpsSubprotocol}}
 	wsClient, _, err := dialer.Dial(access.URL, nil)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
@@ -85,23 +72,15 @@ func TestWebPubSubPublishToGroup(t *testing.T) {
 
 // TestWebPubSubBroadcast verifies SendToAll reaches a connected client.
 func TestWebPubSubBroadcast(t *testing.T) {
-	ts := httptest.NewServer(wpsserver.New())
-	defer ts.Close()
+	client, dialer := newWebPubSub(t)
 
 	const hub = "chat"
-
-	connStr := fmt.Sprintf("Endpoint=%s;AccessKey=localaz-test-key;", ts.URL)
-	client, err := azwebpubsub.NewClientFromConnectionString(connStr, nil)
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
 
 	access, err := client.GenerateClientAccessURL(ctx(t), hub, nil)
 	if err != nil {
 		t.Fatalf("generate access url: %v", err)
 	}
 
-	dialer := websocket.Dialer{Subprotocols: []string{wpsSubprotocol}}
 	wsClient, _, err := dialer.Dial(access.URL, nil)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)

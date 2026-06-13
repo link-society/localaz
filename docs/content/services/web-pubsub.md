@@ -6,8 +6,16 @@ weight: 5
 
 Azure Web PubSub: a REST management surface plus WebSocket client connections
 using the `json.webpubsub.azure.v1` subprotocol, served at
-`http://127.0.0.1:10004` and compatible with the `azwebpubsub` SDK. Hub state is
+`https://127.0.0.1:10004` and compatible with the `azwebpubsub` SDK. Hub state is
 in-memory. See [Configuration](/configuration) to change the listen address.
+
+localaz serves Web PubSub (REST and the WebSocket upgrade) over TLS like every
+other HTTP API. Trust the self-signed certificate it writes to
+`<data>/tls/localaz.crt`:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
 
 ## Supported operations
 
@@ -34,6 +42,12 @@ data plane is **SDK-only** — use the Go example below.
 
 ## Go SDK
 
+Trust localaz's certificate:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
 ```go
 package main
 
@@ -49,7 +63,7 @@ import (
 func main() {
 	ctx := context.Background()
 	client, err := azwebpubsub.NewClientFromConnectionString(
-		"Endpoint=http://127.0.0.1:10004;AccessKey=localaz-test-key;", nil)
+		"Endpoint=https://127.0.0.1:10004;AccessKey=localaz-test-key;", nil)
 	if err != nil {
 		panic(err)
 	}

@@ -5,9 +5,17 @@ weight: 4
 ---
 
 Azure Event Grid namespace topics with **pull delivery** (api-version
-`2024-06-01`), served at `http://127.0.0.1:10003` and compatible with the
+`2024-06-01`), served at `https://127.0.0.1:10003` and compatible with the
 `aznamespaces` SDK. State is in-memory; topics and subscriptions are created on
 first use. See [Configuration](/configuration) to change the listen address.
+
+The `aznamespaces` SDK refuses to send its shared-key credential over plain
+HTTP, so localaz serves Event Grid over TLS like every other HTTP API. Trust the
+self-signed certificate it writes to `<data>/tls/localaz.crt`:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
 
 ## Supported operations
 
@@ -33,6 +41,12 @@ only), so publish and receive are **SDK-only** — use the Go example below.
 
 ## Go SDK
 
+Trust localaz's certificate:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
 ```go
 package main
 
@@ -47,7 +61,7 @@ import (
 )
 
 func main() {
-	const endpoint = "http://127.0.0.1:10003"
+	const endpoint = "https://127.0.0.1:10003"
 	ctx := context.Background()
 	cred := azcore.NewKeyCredential("localaz-dev-key")
 

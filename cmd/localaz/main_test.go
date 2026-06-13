@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"log/slog"
 	"net"
@@ -12,6 +13,7 @@ import (
 
 	"localaz.dev/internal/servers/sbserver"
 	"localaz.dev/internal/stores/sbstore"
+	"localaz.dev/internal/utils/devcert"
 )
 
 // TestRunReturnsErrorOnBindFailure guards the graceful-shutdown fix: when one
@@ -48,7 +50,7 @@ func TestRunReturnsErrorOnBindFailure(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, logger, services, amqp, nil)
+		done <- run(ctx, logger, services, amqp, testCert(t))
 	}()
 
 	select {
@@ -65,6 +67,21 @@ func TestRunReturnsErrorOnBindFailure(t *testing.T) {
 type nopHandler struct{}
 
 func (nopHandler) ServeHTTP(http.ResponseWriter, *http.Request) {}
+
+// testCert builds a self-signed TLS certificate for run, which always serves
+// HTTPS.
+func testCert(t *testing.T) *tls.Certificate {
+	t.Helper()
+	certPEM, keyPEM, err := devcert.Generate()
+	if err != nil {
+		t.Fatalf("generate cert: %v", err)
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+	return &cert
+}
 
 // testWriter funnels run's slog output into the test log.
 type testWriter struct{ t *testing.T }

@@ -5,10 +5,14 @@ weight: 2
 ---
 
 Azure Queue Storage over the native REST (XML) protocol, served at
-`http://127.0.0.1:10001/devstoreaccount1` and compatible with the `azqueue` SDK
+`https://127.0.0.1:10001/devstoreaccount1` and compatible with the `azqueue` SDK
 and the `az storage queue` / `az storage message` commands. Queue state is
 persisted under `/data`. See [Configuration](/configuration) to change ports,
 addresses, and the data directory.
+
+localaz serves every HTTP API over TLS. Trust the self-signed certificate it
+writes to `<data>/tls/localaz.crt` (`./localaz-data/tls/localaz.crt` with the
+Docker volume from [Get Started](/get-started)); the examples below show how.
 
 ## Supported operations
 
@@ -31,8 +35,23 @@ supported.
 
 ## Azure CLI
 
+Trust localaz's certificate:
+
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
+Configure the connection string and run the CLI:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=${AZURE_STORAGE_KEY};QueueEndpoint=https://127.0.0.1:10001/devstoreaccount1;"
 
 az storage queue create --name work-items
 az storage message put --queue-name work-items --content "hello-from-the-cli"
@@ -44,19 +63,35 @@ az storage queue delete --name work-items
 
 ## Go SDK
 
+Trust localaz's certificate:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
 ```go
 package main
 
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue"
 )
 
 func main() {
 	ctx := context.Background()
-	svc, err := azqueue.NewServiceClientWithNoCredential("http://127.0.0.1:10001/devstoreaccount1", nil)
+	connStr := "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;" +
+		"AccountKey=" + os.Getenv("AZURE_STORAGE_KEY") + ";" +
+		"QueueEndpoint=https://127.0.0.1:10001/devstoreaccount1;"
+	svc, err := azqueue.NewServiceClientFromConnectionString(connStr, nil)
 	if err != nil {
 		panic(err)
 	}

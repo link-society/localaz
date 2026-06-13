@@ -51,15 +51,14 @@ func main() {
 	dataDir := flag.String("data", envOr("LOCALAZ_DATA_DIR", "/data"), "directory for persisted state")
 	cloudName := flag.String("arm-cloud-name", envOr("LOCALAZ_ARM_CLOUD_NAME", "localaz"), "cloud name advertised by the ARM metadata document")
 	advertiseHost := flag.String("advertise-host", envOr("LOCALAZ_ADVERTISE_HOST", "127.0.0.1"), "host clients use to reach the control-plane services")
-	tlsCertFile := flag.String("tls-cert", envOr("LOCALAZ_TLS_CERT", ""), "PEM certificate for the bearer/control-plane services")
-	tlsKeyFile := flag.String("tls-key", envOr("LOCALAZ_TLS_KEY", ""), "PEM private key for the bearer/control-plane services")
-	tlsAuto := flag.Bool("tls-auto", envOr("LOCALAZ_TLS_AUTO", "") != "", "generate a self-signed certificate for the bearer/control-plane services")
+	tlsCertFile := flag.String("tls-cert", envOr("LOCALAZ_TLS_CERT", ""), "PEM certificate to serve TLS with (a self-signed one is generated when unset)")
+	tlsKeyFile := flag.String("tls-key", envOr("LOCALAZ_TLS_KEY", ""), "PEM private key matching -tls-cert")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
-	tlsCert, err := loadTLS(logger, *dataDir, *tlsCertFile, *tlsKeyFile, *tlsAuto, *advertiseHost)
+	tlsCert, err := loadTLS(logger, *dataDir, *tlsCertFile, *tlsKeyFile, *advertiseHost)
 	fatal(logger, "init tls", err)
 	blobStore, err := fsstore.New(*dataDir)
 	fatal(logger, "init blob store", err)
@@ -70,10 +69,7 @@ func main() {
 	aadServer, err := aadserver.New(*dataDir)
 	fatal(logger, "init aad server", err)
 
-	scheme := "http"
-	if tlsCert != nil {
-		scheme = "https"
-	}
+	const scheme = "https"
 	armStore := armstore.New(armstore.Config{
 		CloudName:            *cloudName,
 		TenantID:             "adfs",
@@ -89,9 +85,9 @@ func main() {
 		{name: "table", addr: *tableAddr, handler: tableserver.New(tableStore)},
 		{name: "eventgrid", addr: *eventGridAddr, handler: egserver.New(egstore.New())},
 		{name: "webpubsub", addr: *webPubSubAddr, handler: wpsserver.New()},
-		{name: "monitor", addr: *monitorAddr, handler: monitorserver.New(monitorstore.New()), secure: true},
-		{name: "aad", addr: *aadAddr, handler: aadServer, secure: true},
-		{name: "arm", addr: *armAddr, handler: armserver.New(armStore), secure: true},
+		{name: "monitor", addr: *monitorAddr, handler: monitorserver.New(monitorstore.New())},
+		{name: "aad", addr: *aadAddr, handler: aadServer},
+		{name: "arm", addr: *armAddr, handler: armserver.New(armStore)},
 	}
 
 	amqp := amqpService{addr: *serviceBusAddr, server: sbserver.New(sbstore.New())}
@@ -105,13 +101,13 @@ func main() {
 }
 
 // service describes one emulated Azure service mounted on its own HTTP listener.
+// Every HTTP service is served over TLS so the Azure SDKs and CLI will attach
+// credentials (they refuse to over plain HTTP); only Service Bus, which speaks
+// AMQP with UseDevelopmentEmulator (plain TCP + anonymous SASL), stays cleartext.
 type service struct {
 	name    string
 	addr    string
 	handler http.Handler
-	// secure marks services that carry bearer tokens (Entra ID, ARM, Monitor)
-	// and therefore listen over TLS when certificate material is available.
-	secure bool
 }
 
 // amqpService describes the Service Bus listener, which speaks raw AMQP over
@@ -153,26 +149,17 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 			Handler:           logRequests(logger.With("service", svc.name), svc.handler),
 			ReadHeaderTimeout: 30 * time.Second,
 		}
-		useTLS := svc.secure && tlsCert != nil
-		if useTLS {
-			srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*tlsCert}}
-		}
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*tlsCert}}
 		servers = append(servers, srv)
 
 		wg.Add(1)
-		go func(svc service, srv *http.Server, useTLS bool) {
+		go func(svc service, srv *http.Server) {
 			defer wg.Done()
-			logger.Info("service listening", "service", svc.name, "addr", svc.addr, "tls", useTLS)
-			var err error
-			if useTLS {
-				err = srv.ListenAndServeTLS("", "")
-			} else {
-				err = srv.ListenAndServe()
-			}
-			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Info("service listening", "service", svc.name, "addr", svc.addr, "tls", true)
+			if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				reportErr(svc.name, err)
 			}
-		}(svc, srv, useTLS)
+		}(svc, srv)
 	}
 
 	wg.Add(1)
@@ -220,21 +207,17 @@ func fatal(logger *slog.Logger, what string, err error) {
 	}
 }
 
-// loadTLS resolves the certificate used by the bearer/control-plane services.
-// An explicit cert/key pair wins; otherwise -tls-auto generates a throwaway
-// self-signed certificate (with advertiseHost added to its SANs) and writes its
-// PEM under <data>/tls so clients can trust it (for example via
-// REQUESTS_CA_BUNDLE). Returns nil when TLS is off.
-func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, auto bool, advertiseHost string) (*tls.Certificate, error) {
+// loadTLS resolves the certificate that every HTTP service is served with. An
+// explicit cert/key pair wins; otherwise a throwaway self-signed certificate
+// (with advertiseHost added to its SANs) is generated and its PEM written under
+// <data>/tls so clients can trust it (for example via REQUESTS_CA_BUNDLE).
+func loadTLS(logger *slog.Logger, dataDir, certFile, keyFile string, advertiseHost string) (*tls.Certificate, error) {
 	if certFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
 			return nil, fmt.Errorf("load tls key pair: %w", err)
 		}
 		return &cert, nil
-	}
-	if !auto {
-		return nil, nil
 	}
 
 	certPEM, keyPEM, err := devcert.Generate(advertiseHost)

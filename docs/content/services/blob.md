@@ -5,10 +5,14 @@ weight: 1
 ---
 
 Azure Blob Storage over the native REST (XML) protocol, served at
-`http://127.0.0.1:10000/devstoreaccount1` and compatible with the `azblob` SDK
+`https://127.0.0.1:10000/devstoreaccount1` and compatible with the `azblob` SDK
 and the `az storage blob` / `az storage container` commands. Blob state is
 persisted under `/data`. See [Configuration](/configuration) to change ports,
 addresses, and the data directory.
+
+localaz serves every HTTP API over TLS. Trust the self-signed certificate it
+writes to `<data>/tls/localaz.crt` (`./localaz-data/tls/localaz.crt` with the
+Docker volume from [Get Started](/get-started)); the examples below show how.
 
 ## Supported operations
 
@@ -33,8 +37,23 @@ delete, tags, SAS, and Shared Key signature verification.
 
 ## Azure CLI
 
+Trust localaz's certificate:
+
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
+Configure the connection string and run the CLI:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=${AZURE_STORAGE_KEY};BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;"
 
 echo "hello, localaz!" > hello.txt
 
@@ -49,6 +68,18 @@ az storage blob delete --container-name data --name hello.txt
 
 ## Go SDK
 
+Trust localaz's certificate:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
 ```go
 package main
 
@@ -56,6 +87,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
@@ -64,7 +96,10 @@ import (
 
 func main() {
 	ctx := context.Background()
-	client, err := azblob.NewClientWithNoCredential("http://127.0.0.1:10000/devstoreaccount1", nil)
+	connStr := "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;" +
+		"AccountKey=" + os.Getenv("AZURE_STORAGE_KEY") + ";" +
+		"BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;"
+	client, err := azblob.NewClientFromConnectionString(connStr, nil)
 	if err != nil {
 		panic(err)
 	}

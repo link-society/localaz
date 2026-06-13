@@ -43,7 +43,6 @@ func TestControlPlaneCLI(t *testing.T) {
 	const cloudName = "localazcli"
 
 	srv := exec.Command(bin,
-		"-tls-auto",
 		"-arm-cloud-name", cloudName,
 		"-monitor-addr", monitorAddr,
 		"-aad-addr", aadAddr,

@@ -9,10 +9,12 @@ package sdk
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -24,6 +26,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub"
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
 	azingest "github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
 	azquery "github.com/Azure/azure-sdk-for-go/sdk/monitor/query/azlogs"
@@ -39,6 +42,7 @@ import (
 	"localaz.dev/internal/servers/queueserver"
 	"localaz.dev/internal/servers/sbserver"
 	"localaz.dev/internal/servers/tableserver"
+	"localaz.dev/internal/servers/wpsserver"
 	"localaz.dev/internal/stores/armstore"
 	"localaz.dev/internal/stores/blobstore/fsstore"
 	"localaz.dev/internal/stores/egstore"
@@ -139,18 +143,43 @@ func newARM(t *testing.T) (*httptest.Server, *arm.ClientOptions) {
 
 // --- Blob storage ---
 
+// storageAccount and storageKey are the shared-key credentials used by the blob,
+// queue and table suites. localaz never verifies the Shared Key signature, so
+// the key only has to be valid base64; we generate a random one per run rather
+// than committing a secret.
+const storageAccount = "devstoreaccount1"
+
+var storageKey = randomStorageKey()
+
+// randomStorageKey returns a fresh, random base64 value suitable as a Shared Key.
+func randomStorageKey() string {
+	b := make([]byte, 64)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(b)
+}
+
 // newClient spins up an in-process emulator backed by a temporary data
-// directory and returns an azblob client pointed at it.
+// directory and returns an azblob client pointed at it. localaz serves every
+// HTTP service over TLS, so the client reuses the test server's trusting
+// transport.
 func newClient(t *testing.T) *azblob.Client {
 	t.Helper()
 	store, err := fsstore.New(t.TempDir())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	ts := httptest.NewServer(blobserver.New(store))
+	ts := httptest.NewTLSServer(blobserver.New(store))
 	t.Cleanup(ts.Close)
 
-	client, err := azblob.NewClientWithNoCredential(ts.URL+"/devstoreaccount1", nil)
+	connStr := fmt.Sprintf(
+		"DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;BlobEndpoint=%s/%s;",
+		storageAccount, storageKey, ts.URL, storageAccount,
+	)
+	opts := &azblob.ClientOptions{}
+	opts.Transport = ts.Client()
+	client, err := azblob.NewClientFromConnectionString(connStr, opts)
 	if err != nil {
 		t.Fatalf("create client: %v", err)
 	}
@@ -159,18 +188,24 @@ func newClient(t *testing.T) *azblob.Client {
 
 // --- Queue storage ---
 
-// newQueueClient spins up an in-process Queue emulator and returns a service
-// client pointed at it.
+// newQueueClient spins up an in-process Queue emulator over TLS and returns a
+// service client pointed at it.
 func newQueueClient(t *testing.T) *azqueue.ServiceClient {
 	t.Helper()
 	store, err := queuestore.New(t.TempDir())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	ts := httptest.NewServer(queueserver.New(store))
+	ts := httptest.NewTLSServer(queueserver.New(store))
 	t.Cleanup(ts.Close)
 
-	client, err := azqueue.NewServiceClientWithNoCredential(ts.URL+"/devstoreaccount1", nil)
+	connStr := fmt.Sprintf(
+		"DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;QueueEndpoint=%s/%s;",
+		storageAccount, storageKey, ts.URL, storageAccount,
+	)
+	opts := &azqueue.ClientOptions{}
+	opts.Transport = ts.Client()
+	client, err := azqueue.NewServiceClientFromConnectionString(connStr, opts)
 	if err != nil {
 		t.Fatalf("create client: %v", err)
 	}
@@ -179,18 +214,24 @@ func newQueueClient(t *testing.T) *azqueue.ServiceClient {
 
 // --- Table storage ---
 
-// newTableServiceClient spins up an in-process Table emulator and returns a
-// service client pointed at it.
+// newTableServiceClient spins up an in-process Table emulator over TLS and
+// returns a service client pointed at it.
 func newTableServiceClient(t *testing.T) *aztables.ServiceClient {
 	t.Helper()
 	store, err := tablestore.New(t.TempDir())
 	if err != nil {
 		t.Fatalf("create store: %v", err)
 	}
-	ts := httptest.NewServer(tableserver.New(store))
+	ts := httptest.NewTLSServer(tableserver.New(store))
 	t.Cleanup(ts.Close)
 
-	client, err := aztables.NewServiceClientWithNoCredential(ts.URL+"/devstoreaccount1", nil)
+	connStr := fmt.Sprintf(
+		"DefaultEndpointsProtocol=https;AccountName=%s;AccountKey=%s;TableEndpoint=%s/%s;",
+		storageAccount, storageKey, ts.URL, storageAccount,
+	)
+	opts := &aztables.ClientOptions{}
+	opts.Transport = ts.Client()
+	client, err := aztables.NewServiceClientFromConnectionString(connStr, opts)
 	if err != nil {
 		t.Fatalf("create client: %v", err)
 	}
@@ -333,6 +374,31 @@ func startServiceBus(t *testing.T) string {
 // --- Web PubSub ---
 
 const wpsSubprotocol = "json.webpubsub.azure.v1"
+
+// newWebPubSub spins up an in-process Web PubSub emulator over TLS and returns a
+// service client plus a WebSocket dialer that both trust the test server's
+// certificate. Web PubSub serves the REST control plane and the client
+// WebSocket on the same listener, so the dialer reuses the server's TLS config.
+func newWebPubSub(t *testing.T) (*azwebpubsub.Client, *websocket.Dialer) {
+	t.Helper()
+	ts := httptest.NewTLSServer(wpsserver.New())
+	t.Cleanup(ts.Close)
+
+	httpClient := ts.Client()
+	opts := &azwebpubsub.ClientOptions{}
+	opts.Transport = httpClient
+	connStr := fmt.Sprintf("Endpoint=%s;AccessKey=localaz-test-key;", ts.URL)
+	client, err := azwebpubsub.NewClientFromConnectionString(connStr, opts)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+
+	dialer := &websocket.Dialer{
+		Subprotocols:    []string{wpsSubprotocol},
+		TLSClientConfig: httpClient.Transport.(*http.Transport).TLSClientConfig,
+	}
+	return client, dialer
+}
 
 func readFrame(t *testing.T, c *websocket.Conn) map[string]any {
 	t.Helper()

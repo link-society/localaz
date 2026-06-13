@@ -26,13 +26,22 @@ weight: 4
 
 ## TLS Configuration
 
+Every HTTP service is served over TLS (Service Bus, being AMQP, is the only
+plaintext listener). When no certificate is supplied, localaz generates a
+self-signed one and writes it to `<data>/tls/localaz.{crt,key}` on startup.
+Trust that certificate in your clients:
+
+```bash
+export SSL_CERT_FILE=<data>/tls/localaz.crt
+```
+
 | Description | Flag | Environment variable | Default |
 | ----------- | ---- | -------------------- | ------- |
-| Generate a self-signed certificate | `-tls-auto` | `LOCALAZ_TLS_AUTO` | N/A |
-| Path to the PEM encoded public key of a certificate | `-tls-cert` | `LOCALAZ_TLS_CERT` | N/A |
-| Path to the PEM encoded private key of a certificate | `-tls-key` | `LOCALAZ_TLS_KEY` | N/A |
+| Path to the PEM encoded public key of a certificate | `-tls-cert` | `LOCALAZ_TLS_CERT` | auto-generated |
+| Path to the PEM encoded private key of a certificate | `-tls-key` | `LOCALAZ_TLS_KEY` | auto-generated |
 
-If `-tls-auto` is specified, then `-tls-cert` and `-tls-key` are ignored.
+Supply both `-tls-cert` and `-tls-key` to serve your own certificate instead of
+the auto-generated one.
 
 ## Storage Configuration
 

@@ -9,10 +9,10 @@ Azure Monitor Logs: two data planes on one port — **Logs Ingestion** and the
 the `monitor/ingestion/azlogs` and `monitor/query/azlogs` SDKs. Tables are
 in-memory.
 
-Both SDKs send bearer tokens, which azcore refuses over plain HTTP, so run
-localaz with `-tls-auto` and trust the generated certificate. See the
-[Control plane](/services/control-plane) sign-in recipe and
-[Configuration](/configuration).
+Both SDKs send bearer tokens, which azcore refuses over plain HTTP. localaz
+serves TLS by default; trust the self-signed certificate it writes to
+`<data>/tls/localaz.crt`. See the [Control plane](/services/control-plane)
+sign-in recipe and [Configuration](/configuration).
 
 ## Supported operations
 

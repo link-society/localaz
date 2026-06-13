@@ -16,7 +16,8 @@ docker run --name localaz \
   linksociety/localaz:latest
 ```
 
-All persisted data will live in the `./localaz-data` folder.
+All persisted data — including the auto-generated TLS certificate at
+`./localaz-data/tls/localaz.crt` — will live in the `./localaz-data` folder.
 
 ## Service endpoints
 
@@ -24,11 +25,11 @@ Once running, the services are available at:
 
 | Service | Endpoint |
 | --- | --- |
-| [Blob Storage](/services/blob) | `http://127.0.0.1:10000/devstoreaccount1` |
-| [Queue Storage](/services/queue) | `http://127.0.0.1:10001/devstoreaccount1` |
-| [Table Storage](/services/table) | `http://127.0.0.1:10002/devstoreaccount1` |
-| [Event Grid](/services/event-grid) | `http://127.0.0.1:10003` |
-| [Web PubSub](/services/web-pubsub) | `http://127.0.0.1:10004` |
+| [Blob Storage](/services/blob) | `https://127.0.0.1:10000/devstoreaccount1` |
+| [Queue Storage](/services/queue) | `https://127.0.0.1:10001/devstoreaccount1` |
+| [Table Storage](/services/table) | `https://127.0.0.1:10002/devstoreaccount1` |
+| [Event Grid](/services/event-grid) | `https://127.0.0.1:10003` |
+| [Web PubSub](/services/web-pubsub) | `https://127.0.0.1:10004` |
 | [Service Bus](/services/service-bus) | `sb://127.0.0.1:5672` |
 | [Monitor Logs](/services/monitor-logs) | `https://127.0.0.1:10005` |
 | [Entra ID](/services/control-plane) | `https://127.0.0.1:10006` |
@@ -38,8 +39,23 @@ Once running, the services are available at:
 
 ### Azure CLI
 
+Trust localaz's certificate:
+
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
+Configure the connection string and run the CLI:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=${AZURE_STORAGE_KEY};BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;QueueEndpoint=https://127.0.0.1:10001/devstoreaccount1;TableEndpoint=https://127.0.0.1:10002/devstoreaccount1;"
 
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
@@ -54,8 +70,23 @@ az storage entity insert --table-name people --entity PartitionKey=team RowKey=a
 
 ### Go SDK
 
+Trust localaz's certificate and supply a Shared Key before running:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
 ```go
-client, _ := azblob.NewClientWithNoCredential("http://127.0.0.1:10000/devstoreaccount1", nil)
+connStr := "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;" +
+	"AccountKey=" + os.Getenv("AZURE_STORAGE_KEY") + ";" +
+	"BlobEndpoint=https://127.0.0.1:10000/devstoreaccount1;"
+client, _ := azblob.NewClientFromConnectionString(connStr, nil)
 client.CreateContainer(ctx, "demo", nil)
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
 ```

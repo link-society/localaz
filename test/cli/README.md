@@ -48,7 +48,8 @@ does not fail on build constraints.
 | ---- | -------- |
 | `TestControlPlaneCLI` | The flagship end-to-end flow (see below) |
 
-`TestControlPlaneCLI` launches localaz with `-tls-auto`, isolates a throwaway
+`TestControlPlaneCLI` launches localaz (which serves TLS by default, writing a
+self-signed cert under `<data>/tls`), isolates a throwaway
 `AZURE_CONFIG_DIR`, registers localaz as a custom cloud, signs in with a service
 principal (`--tenant adfs`), and then:
 

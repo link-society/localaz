@@ -5,10 +5,14 @@ weight: 3
 ---
 
 Azure Table Storage (api-version `2019-02-02`) over the OData JSON wire format,
-served at `http://127.0.0.1:10002/devstoreaccount1` and compatible with the
+served at `https://127.0.0.1:10002/devstoreaccount1` and compatible with the
 `aztables` SDK and the `az storage table` / `az storage entity` commands. Table
 state is persisted under `/data`. See [Configuration](/configuration) to change
 ports, addresses, and the data directory.
+
+localaz serves every HTTP API over TLS. Trust the self-signed certificate it
+writes to `<data>/tls/localaz.crt` (`./localaz-data/tls/localaz.crt` with the
+Docker volume from [Get Started](/get-started)); the examples below show how.
 
 ## Supported operations
 
@@ -31,8 +35,23 @@ functions, continuation tokens, and Shared Key signature verification.
 
 ## Azure CLI
 
+Trust localaz's certificate:
+
 ```bash
-export AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true"
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
+Configure the connection string and run the CLI:
+
+```bash
+export AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;AccountKey=${AZURE_STORAGE_KEY};TableEndpoint=https://127.0.0.1:10002/devstoreaccount1;"
 
 az storage table create --name people
 az storage entity insert --table-name people --entity PartitionKey=team RowKey=alice Name=Alice
@@ -43,6 +62,18 @@ az storage entity delete --table-name people --partition-key team --row-key alic
 
 ## Go SDK
 
+Trust localaz's certificate:
+
+```bash
+export SSL_CERT_FILE=./localaz-data/tls/localaz.crt
+```
+
+Generate a random storage key:
+
+```bash
+export AZURE_STORAGE_KEY="$(openssl rand -base64 64 | tr -d '\n')"
+```
+
 ```go
 package main
 
@@ -50,6 +81,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/aztables"
@@ -57,7 +89,10 @@ import (
 
 func main() {
 	ctx := context.Background()
-	svc, err := aztables.NewServiceClientWithNoCredential("http://127.0.0.1:10002/devstoreaccount1", nil)
+	connStr := "DefaultEndpointsProtocol=https;AccountName=devstoreaccount1;" +
+		"AccountKey=" + os.Getenv("AZURE_STORAGE_KEY") + ";" +
+		"TableEndpoint=https://127.0.0.1:10002/devstoreaccount1;"
+	svc, err := aztables.NewServiceClientFromConnectionString(connStr, nil)
 	if err != nil {
 		panic(err)
 	}
