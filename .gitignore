@@ -15,3 +15,6 @@ test/cli/.out/
 
 # Editor / OS
 .DS_Store
+
+# Superpowers planning/spec artifacts (local only, never committed)
+/docs/superpowers/
