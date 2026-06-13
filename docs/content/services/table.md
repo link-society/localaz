@@ -51,9 +51,12 @@ functions, continuation tokens, and Shared Key signature verification.
 This tutorial creates a table, inserts an entity, and queries it back with a
 `$filter`.
 
-> **Prerequisites:** localaz is running and `AZURE_STORAGE_CONNECTION_STRING` is
-> exported — see [Get Started](../../get-started/). Install the SDK with
-> `go get github.com/Azure/azure-sdk-for-go/sdk/data/aztables`.
+With localaz running and `AZURE_STORAGE_CONNECTION_STRING` exported (see
+[Get Started](../../get-started/)), install the SDK:
+
+```bash
+go get github.com/Azure/azure-sdk-for-go/sdk/data/aztables
+```
 
 ```go
 import (
@@ -71,10 +74,8 @@ table := svc.NewClient("people")
 
 ctx := context.Background()
 
-// 1. Create the table.
 table.CreateTable(ctx, nil)
 
-// 2. Insert an entity keyed by (PartitionKey, RowKey).
 entity := aztables.EDMEntity{
     Entity:     aztables.Entity{PartitionKey: "team", RowKey: "alice"},
     Properties: map[string]any{"Name": "Alice"},
@@ -82,8 +83,6 @@ entity := aztables.EDMEntity{
 b, _ := json.Marshal(entity)
 table.AddEntity(ctx, b, nil)
 
-// 3. Query the partition back. Iterate the pager with pager.More() /
-//    pager.NextPage(ctx) to read the matching entities.
 pager := table.NewListEntitiesPager(&aztables.ListEntitiesOptions{
     Filter: to.Ptr("PartitionKey eq 'team'"),
 })
@@ -95,13 +94,10 @@ Export `AZURE_STORAGE_CONNECTION_STRING` first — see
 [Get Started](../../get-started/).
 
 ```bash
-# 1. Create a table.
 az storage table create --name people
 
-# 2. Insert an entity (PartitionKey + RowKey + properties).
 az storage entity insert --table-name people \
   --entity PartitionKey=team RowKey=alice Name=Alice
 
-# 3. Query entities in the partition with an OData $filter.
 az storage entity query --table-name people --filter "PartitionKey eq 'team'"
 ```

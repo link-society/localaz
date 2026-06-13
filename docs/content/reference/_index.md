@@ -32,39 +32,50 @@ localaz [flags]
 | `-tls-key` | `LOCALAZ_TLS_KEY` | _(unset)_ | PEM private key for the bearer/control-plane services |
 | `-tls-auto` | `LOCALAZ_TLS_AUTO` | _(off)_ | Generate a self-signed certificate at startup |
 
-> The Blob flag is `-addr` (not `-blob-addr`) to match the well-known Azure
-> development-storage convention; the account is `devstoreaccount1`.
-
 ## Endpoints and protocols
 
 | Service | Endpoint | Protocol | TLS |
 | ------- | -------- | -------- | --- |
-| Blob | `http://127.0.0.1:10000/devstoreaccount1` | HTTP / REST (XML) | No |
-| Queue | `http://127.0.0.1:10001/devstoreaccount1` | HTTP / REST (XML) | No |
-| Table | `http://127.0.0.1:10002/devstoreaccount1` | HTTP / REST (OData JSON) | No |
-| Event Grid | `http://127.0.0.1:10003` | HTTP / REST | No |
-| Web PubSub | `http://127.0.0.1:10004` | HTTP + WebSocket | No |
-| Monitor Logs | `https://127.0.0.1:10005` | HTTPS / REST | Yes |
-| Entra ID (AAD) | `https://127.0.0.1:10006` | HTTPS / REST | Yes |
-| Resource Manager (ARM) | `https://127.0.0.1:10007` | HTTPS / REST | Yes |
-| Service Bus | `sb://127.0.0.1:5672` | AMQP 1.0 over TCP | No |
+| Blob | `http://127.0.0.1:10000/devstoreaccount1` | HTTP / REST (XML) | &#10060; |
+| Queue | `http://127.0.0.1:10001/devstoreaccount1` | HTTP / REST (XML) | &#10060; |
+| Table | `http://127.0.0.1:10002/devstoreaccount1` | HTTP / REST (OData JSON) | &#10060; |
+| Event Grid | `http://127.0.0.1:10003` | HTTP / REST | &#10060; |
+| Web PubSub | `http://127.0.0.1:10004` | HTTP + WebSocket | &#10060; |
+| Monitor Logs | `https://127.0.0.1:10005` | HTTPS / REST | &#9989; |
+| Entra ID (AAD) | `https://127.0.0.1:10006` | HTTPS / REST | &#9989; |
+| Resource Manager (ARM) | `https://127.0.0.1:10007` | HTTPS / REST | &#9989; |
+| Service Bus | `sb://127.0.0.1:5672` | AMQP 1.0 over TCP | &#10060; |
 
 The storage and pub/sub services speak plain HTTP. The control-plane services
 (Monitor Logs, Entra ID, Resource Manager) carry bearer tokens, which the SDKs
 refuse to send over plain HTTP — so they serve **HTTPS** once a certificate is
-configured (`-tls-auto`, or `-tls-cert`/`-tls-key`).
+configured.
 
 ## TLS
 
 The control plane is unusable over plain HTTP, so enable TLS whenever you use
-Entra ID, Resource Manager, or Monitor Logs:
+Entra ID, Resource Manager, or Monitor Logs.
 
-- `-tls-auto` generates a self-signed certificate at startup and writes it to
-  `<data>/tls/localaz.crt` and `<data>/tls/localaz.key` (both `0600`). The
-  certificate's SANs include the loopback defaults plus `-advertise-host`.
-- `-tls-cert` / `-tls-key` supply your own PEM key pair instead.
+Generate a self-signed certificate at startup, written to
+`<data>/tls/localaz.crt` and `<data>/tls/localaz.key` (both `0600`):
 
-Clients must trust the certificate. For the Azure CLI, set both:
+```bash
+localaz -tls-auto
+```
+
+Add hosts beyond the loopback defaults to the certificate's SANs:
+
+```bash
+localaz -tls-auto -advertise-host host.docker.internal
+```
+
+Or supply your own PEM key pair:
+
+```bash
+localaz -tls-cert ./localaz.crt -tls-key ./localaz.key
+```
+
+Clients must trust the certificate. For the Azure CLI:
 
 ```bash
 export REQUESTS_CA_BUNDLE=<data>/tls/localaz.crt

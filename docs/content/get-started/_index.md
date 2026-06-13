@@ -57,8 +57,8 @@ Once running, the services are available at:
 
 The storage and pub/sub services speak plain HTTP. The control-plane services
 (Monitor Logs, Entra ID, Resource Manager) carry bearer tokens, which the SDKs
-refuse over plain HTTP — so they serve **HTTPS** once TLS is enabled (`-tls-auto`).
-See [Control plane](../services/control-plane/) for the TLS and sign-in recipe.
+refuse over plain HTTP — so they serve **HTTPS** once TLS is enabled. See
+[Control plane](../services/control-plane/) for the TLS and sign-in recipe.
 
 ## Connect a client (storage)
 
@@ -76,7 +76,6 @@ Both the Azure CLI and the SDKs pick up `AZURE_STORAGE_CONNECTION_STRING`
 automatically. A quick smoke test with the CLI:
 
 ```bash
-# 1. Create a container, 2. upload a file, 3. list what's there.
 az storage container create --name demo
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
 az storage blob list --container-name demo -o table

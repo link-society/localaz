@@ -26,9 +26,6 @@ variable; flags take precedence. The shared data directory flag is `-data` /
 | Resource Manager (ARM) | `-arm-addr` | `LOCALAZ_ARM_ADDR` | `:10007` |
 | Service Bus | `-servicebus-addr` | `LOCALAZ_SERVICEBUS_ADDR` | `:5672` |
 
-> The Blob flag is `-addr` (not `-blob-addr`) to match the standard Azure
-> development-storage convention (port `10000`, account `devstoreaccount1`).
-
 This table covers the listen-address flags. For the **complete** reference —
 including the data directory, the control-plane options (`-advertise-host`,
 `-arm-cloud-name`), and the TLS flags (`-tls-auto`, `-tls-cert`, `-tls-key`) —

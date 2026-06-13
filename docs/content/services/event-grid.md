@@ -44,32 +44,32 @@ delivery counts, with acknowledge/release/reject settlement.
 This tutorial publishes a CloudEvent to a namespace topic, then pulls and
 acknowledges it from a subscription.
 
-> **Prerequisites:** localaz is running. Install the SDK with
-> `go get github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces`.
-> localaz does **not** verify credentials, so any `azcore.TokenCredential`
-> works for `cred`.
+Install the SDK:
+
+```bash
+go get github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces
+```
+
+localaz does not verify credentials, so any `azcore.TokenCredential` works for `cred`.
 
 ```go
 import (
     "context"
 
-    "github.com/Azure/azure-sdk-for-go/sdk/messaging"
+    "github.com/Azure/azure-sdk-for-go/sdk/azcore/messaging"
     "github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
 )
 
 ctx := context.Background()
-const endpoint = "http://127.0.0.1:10003" // the local Event Grid endpoint
+const endpoint = "http://127.0.0.1:10003"
 
-// 1. Publish a CloudEvent to the topic (created on first use).
 sender, _ := aznamespaces.NewSenderClient(endpoint, "my-topic", cred, nil)
 event, _ := messaging.NewCloudEvent("source", "type", map[string]string{"k": "v"}, nil)
 sender.SendEvent(ctx, &event, nil)
 
-// 2. Pull events from a subscription (pull delivery).
 receiver, _ := aznamespaces.NewReceiverClient(endpoint, "my-topic", "sub1", cred, nil)
 resp, _ := receiver.ReceiveEvents(ctx, nil)
 
-// 3. Acknowledge each event by its broker lock token so it is settled.
 for _, d := range resp.Details {
     receiver.AcknowledgeEvents(ctx, []string{*d.BrokerProperties.LockToken}, nil)
 }

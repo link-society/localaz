@@ -59,16 +59,13 @@ parentheses, scalar functions, timespan filtering, and cross-workspace queries.
 
 ## Example: Go SDK
 
-This tutorial ingests two records into a custom table, then queries them back
-with the KQL subset. **Ingestion and query are two separate `azlogs` packages**
-(`monitor/ingestion/azlogs` and `monitor/query/azlogs`); they are aliased below
-to avoid the name clash, and both are pointed at the local endpoint with a custom
-`cloud.Configuration`.
+Ingestion and query are two separate `azlogs` packages
+(`monitor/ingestion/azlogs` and `monitor/query/azlogs`), aliased below to avoid
+the name clash and both pointed at the local endpoint via `cloud.Configuration`.
 
-> **Prerequisites:** run localaz with `-tls-auto` so Monitor serves HTTPS (the
-> SDK refuses bearer tokens over plain HTTP), and have the client trust the
-> generated certificate — see [Control plane](../control-plane/). `cred` may be
-> any `azcore.TokenCredential`; localaz does not validate it.
+Monitor requires HTTPS with a trusted certificate — see
+[Control plane](../control-plane/). `cred` may be any
+`azcore.TokenCredential`; localaz does not validate it.
 
 ```go
 import (
@@ -84,7 +81,6 @@ import (
 ctx := context.Background()
 const endpoint = "https://127.0.0.1:10005"
 
-// Point both clients at the local endpoint.
 cfg := cloud.Configuration{
     Services: map[cloud.ServiceName]cloud.ServiceConfiguration{
         azingest.ServiceNameIngestion: {Audience: "https://monitor.azure.com", Endpoint: endpoint},
@@ -92,7 +88,6 @@ cfg := cloud.Configuration{
     },
 }
 
-// 1. Ingest records. The "Custom-" prefix is stripped, so they land in AppLogs_CL.
 ingOpts := &azingest.ClientOptions{}
 ingOpts.Cloud = cfg
 ingest, _ := azingest.NewClient(endpoint, cred, ingOpts)
@@ -100,8 +95,6 @@ records := []map[string]any{{"Message": "hello", "Level": "Info"}}
 body, _ := json.Marshal(records)
 ingest.Upload(ctx, "dcr-id", "Custom-AppLogs_CL", body, nil)
 
-// 2. Query the table back. The query client takes no endpoint — it reads it
-//    from the cloud config above.
 qOpts := &azquery.ClientOptions{}
 qOpts.Cloud = cfg
 query, _ := azquery.NewClient(cred, qOpts)

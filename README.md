@@ -22,11 +22,8 @@ Documentation: **[localaz.dev](https://localaz.dev)**
 - [Quick start](#quick-start)
 - [Connect a client](#connect-a-client)
 - [Usage](#usage)
-- [Configuration](#configuration)
 - [Common tasks](#common-tasks)
-- [Project structure](#project-structure)
 - [Documentation](#documentation)
-- [Contributing](#contributing)
 - [License](#license)
 
 ## Supported services
@@ -76,16 +73,11 @@ docker compose -f docker/docker-compose.dev.yml up --build
 
 ## Connect a client
 
-localaz uses the well-known Azure development storage account (`devstoreaccount1`)
-on the standard development ports, so the SDKs and the CLI connect with the
-`UseDevelopmentStorage=true` shorthand — no account name or key to write down:
+Export the storage connection string and both the Azure CLI and the SDKs pick it up automatically:
 
 ```bash
 eval "$(task env:conn-string)"
 ```
-
-This exports `AZURE_STORAGE_CONNECTION_STRING`, which both the Azure CLI and the
-SDKs pick up automatically.
 
 > The control-plane services (Entra ID, Resource Manager, Monitor Logs) require
 > TLS and a one-time cloud registration — see
@@ -143,23 +135,6 @@ az cloud set -n localaz
 az login --service-principal -u <app-id> -p <any-secret> --tenant adfs
 ```
 
-## Configuration
-
-Every setting is a command-line flag with a matching environment variable; flags
-take precedence. The most common ones:
-
-| Flag | Environment variable | Default | Description |
-| ---- | -------------------- | ------- | ----------- |
-| `-addr` | `LOCALAZ_BLOB_ADDR` | `:10000` | Blob listen address |
-| `-data` | `LOCALAZ_DATA_DIR` | `/data` | Directory for persisted state |
-| `-advertise-host` | `LOCALAZ_ADVERTISE_HOST` | `127.0.0.1` | Host clients use to reach the control plane |
-| `-arm-cloud-name` | `LOCALAZ_ARM_CLOUD_NAME` | `localaz` | Cloud name in the ARM metadata document |
-| `-tls-auto` | `LOCALAZ_TLS_AUTO` | _(off)_ | Generate a self-signed cert for the control plane |
-| `-tls-cert` / `-tls-key` | `LOCALAZ_TLS_CERT` / `LOCALAZ_TLS_KEY` | _(unset)_ | Supply your own control-plane certificate |
-
-See the **[full reference](https://localaz.dev/reference/)** for every flag, the
-per-service listen addresses, and the on-disk data layout.
-
 ## Common tasks
 
 ```bash
@@ -175,39 +150,15 @@ task docker:down     # stop the dev compose stack
 task env:conn-string # print an export line for the connection string
 ```
 
-## Project structure
-
-```
-cmd/localaz                    entrypoint / process wiring (one listener per service)
-internal/servers/<svc>server   Azure wire protocol per service (routing, codec, errors)
-internal/stores/<svc>store     state + persistence per service (behind a Store interface)
-internal/utils/...             shared helpers (httpx, azwire, azerr, atomicfile, devcert)
-test/sdk                       integration tests via the Azure Go SDKs
-test/cli                       end-to-end tests via the Azure CLI (build tag: cli)
-docker/                        localaz.dockerfile, docker-compose.dev.yml
-docs/                          Hugo documentation site (published at localaz.dev)
-```
-
-See [Architecture](https://localaz.dev/architecture/) for how the pieces fit
-together.
-
 ## Documentation
 
 - **[localaz.dev](https://localaz.dev)** — full documentation: per-service
-  guides, the configuration [reference](https://localaz.dev/reference/), and the
-  [architecture](https://localaz.dev/architecture/) overview.
-- **[AGENTS.md](AGENTS.md)** — deep contributor/internals reference (per-service
-  design notes and gotchas).
+  guides, configuration reference, and architecture overview.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — development setup, conventions, and the
   pull request workflow.
 - **[CHANGELOG.md](CHANGELOG.md)** — release history.
 
-## Contributing
-
-Contributions are welcome! Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for
-the development setup, coding conventions, commit style, and PR process. In
-short: `task lint` and `task test:unit` must pass, and commits follow
-[gitmoji](https://gitmoji.dev).
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
 ## License
 

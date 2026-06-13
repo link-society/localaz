@@ -43,12 +43,12 @@ WebSocket are supported.
 
 ## Example: Go SDK
 
-This tutorial connects to a hub's REST surface and broadcasts a message to every
-connected client.
+Connect to a hub's REST surface and broadcast to every connected client. The
+`AccessKey` is accepted but not verified.
 
-> **Prerequisites:** localaz is running. Install the SDK with
-> `go get github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub`. The
-> `AccessKey` in the connection string is accepted but not verified.
+```bash
+go get github.com/Azure/azure-sdk-for-go/sdk/messaging/azwebpubsub
+```
 
 ```go
 import (
@@ -61,12 +61,9 @@ import (
 
 ctx := context.Background()
 
-// Build a service client for hub "hub1" from the local connection string.
 client, _ := azwebpubsub.NewClientFromConnectionString(
     "Endpoint=http://127.0.0.1:10004;AccessKey=test;", "hub1", nil)
 
-// Broadcast a text message to every client connected to the hub. Clients join
-// over a WebSocket at ws://127.0.0.1:10004/client/hubs/hub1.
 client.SendToAll(ctx, azwebpubsub.ContentTypeTextPlain,
     streaming.NopCloser(strings.NewReader("hello everyone")), nil)
 ```

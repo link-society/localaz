@@ -22,11 +22,6 @@ Azure Blob Storage emulation: containers and block blobs over the native REST
 | `-addr` | `LOCALAZ_BLOB_ADDR` | `:10000` |
 | `-data` | `LOCALAZ_DATA_DIR` | `/data` |
 
-The Blob flag is `-addr` (not `-blob-addr`) to match the well-known Azure
-development-storage convention: port `10000` with the `devstoreaccount1`
-account, which the SDKs and the CLI reach through the `UseDevelopmentStorage=true`
-shorthand.
-
 ## Supported operations
 
 | Operation | REST surface |
@@ -51,11 +46,12 @@ delete, tags, SAS, and Shared Key signature verification.
 
 ## Example: Go SDK
 
-This tutorial creates a container, uploads a blob, and reads it back.
+Create a container, upload a blob, and read it back. Set
+`AZURE_STORAGE_CONNECTION_STRING` first — see [Get Started](../../get-started/).
 
-> **Prerequisites:** localaz is running and `AZURE_STORAGE_CONNECTION_STRING` is
-> exported — see [Get Started](../../get-started/). Install the SDK with
-> `go get github.com/Azure/azure-sdk-for-go/sdk/storage/azblob`.
+```bash
+go get github.com/Azure/azure-sdk-for-go/sdk/storage/azblob
+```
 
 ```go
 import (
@@ -67,19 +63,14 @@ import (
     "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
 
-// The connection string carries the endpoint and credentials.
 connStr := os.Getenv("AZURE_STORAGE_CONNECTION_STRING")
 client, _ := azblob.NewClientFromConnectionString(connStr, nil)
 
 ctx := context.Background()
 
-// 1. Create a container named "demo".
 client.CreateContainer(ctx, "demo", nil)
-
-// 2. Upload a small block blob into it.
 client.UploadBuffer(ctx, "demo", "hello.txt", []byte("hi"), nil)
 
-// 3. Download it again and print the body — prints: hi
 resp, _ := client.DownloadStream(ctx, "demo", "hello.txt", nil)
 data, _ := io.ReadAll(resp.Body)
 fmt.Println(string(data))
@@ -87,19 +78,12 @@ fmt.Println(string(data))
 
 ## Example: Azure CLI
 
-The same flow with the `az storage` commands. Export
+The same flow with the `az storage` commands. Set
 `AZURE_STORAGE_CONNECTION_STRING` first — see [Get Started](../../get-started/).
 
 ```bash
-# 1. Create a container.
 az storage container create --name demo
-
-# 2. Upload a local file as a blob.
 az storage blob upload --container-name demo --name hello.txt --file ./hello.txt
-
-# 3. List the blobs in the container as a table.
 az storage blob list --container-name demo -o table
-
-# 4. Download the blob back to a local file.
 az storage blob download --container-name demo --name hello.txt --file ./out.txt
 ```

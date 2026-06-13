@@ -44,11 +44,12 @@ TTL with eviction on access), and dequeue counts.
 
 ## Example: Go SDK
 
-This tutorial creates a queue, enqueues a message, then dequeues and deletes it.
+Start localaz and export `AZURE_STORAGE_CONNECTION_STRING` — see
+[Get Started](../../get-started/).
 
-> **Prerequisites:** localaz is running and `AZURE_STORAGE_CONNECTION_STRING` is
-> exported — see [Get Started](../../get-started/). Install the SDK with
-> `go get github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue`.
+```bash
+go get github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue
+```
 
 ```go
 import (
@@ -64,15 +65,12 @@ queue := client.NewQueueClient("work-items")
 
 ctx := context.Background()
 
-// 1. Create the queue and enqueue one message.
 queue.Create(ctx, nil)
 queue.EnqueueMessage(ctx, "hello", nil)
 
-// 2. Dequeue the message — it becomes invisible for the visibility timeout.
 resp, _ := queue.DequeueMessage(ctx, nil)
 msg := resp.Messages[0]
 
-// 3. Delete it with its pop receipt so it is not redelivered.
 queue.DeleteMessage(ctx, *msg.MessageID, *msg.PopReceipt, nil)
 ```
 
@@ -82,15 +80,8 @@ Export `AZURE_STORAGE_CONNECTION_STRING` first — see
 [Get Started](../../get-started/).
 
 ```bash
-# 1. Create a queue.
 az storage queue create --name work-items
-
-# 2. Put a message on it.
 az storage message put --queue-name work-items --content "hello"
-
-# 3. Get a message (dequeues it, applying the visibility timeout).
 az storage message get --queue-name work-items
-
-# 4. Peek a message without dequeuing it.
 az storage message peek --queue-name work-items
 ```
