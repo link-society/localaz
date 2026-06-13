@@ -30,6 +30,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
 	azingest "github.com/Azure/azure-sdk-for-go/sdk/monitor/ingestion/azlogs"
 	azquery "github.com/Azure/azure-sdk-for-go/sdk/monitor/query/azlogs"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue"
 	"github.com/gorilla/websocket"
@@ -38,6 +39,7 @@ import (
 	"localaz.dev/internal/servers/armserver"
 	"localaz.dev/internal/servers/blobserver"
 	"localaz.dev/internal/servers/egserver"
+	"localaz.dev/internal/servers/kvserver"
 	"localaz.dev/internal/servers/monitorserver"
 	"localaz.dev/internal/servers/queueserver"
 	"localaz.dev/internal/servers/sbserver"
@@ -46,6 +48,7 @@ import (
 	"localaz.dev/internal/stores/armstore"
 	"localaz.dev/internal/stores/blobstore/fsstore"
 	"localaz.dev/internal/stores/egstore"
+	"localaz.dev/internal/stores/keyvaultstore"
 	"localaz.dev/internal/stores/monitorstore"
 	"localaz.dev/internal/stores/queuestore"
 	"localaz.dev/internal/stores/sbstore"
@@ -345,6 +348,31 @@ func queryRows(t *testing.T, c *azquery.Client, kql string) azquery.Table {
 		t.Fatalf("expected 1 table, got %d", len(resp.Tables))
 	}
 	return resp.Tables[0]
+}
+
+// --- Key Vault ---
+
+// newKeyVault spins up an in-process Key Vault secrets emulator over TLS and
+// returns an azsecrets client pointed at it. The SDK's challenge-auth policy
+// verifies that the challenge resource host matches the vault domain; the
+// emulator's host is an IP:port, so resource verification is disabled (the
+// standard requirement for a custom Key Vault endpoint).
+func newKeyVault(t *testing.T) *azsecrets.Client {
+	t.Helper()
+	store, err := keyvaultstore.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("create store: %v", err)
+	}
+	ts := httptest.NewTLSServer(kvserver.New(store, "https://login.localaz.test/adfs"))
+	t.Cleanup(ts.Close)
+
+	opts := &azsecrets.ClientOptions{DisableChallengeResourceVerification: true}
+	opts.Transport = ts.Client()
+	client, err := azsecrets.NewClient(ts.URL, fakeCredential{}, opts)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	return client
 }
 
 // --- Service Bus ---

@@ -79,3 +79,12 @@ constructors, a fake `TokenCredential`, and small utilities).
 | `TestAADClientSecretCredential` | Client-secret credential mints a token against the emulated AAD |
 | `TestARMListSubscriptions` | List the fixed subscription/tenant |
 | `TestARMResourceGroupLifecycle` | Create, get, list and delete a resource group |
+
+### Key Vault (`azsecrets`)
+
+| Test | Scenario |
+| ---- | -------- |
+| `TestKeyVaultSecretSetGet` | Set a secret with tags, then get it back |
+| `TestKeyVaultSecretUpdate` | Update attributes/content type; value stays immutable |
+| `TestKeyVaultListSecretsAndVersions` | List secrets and a secret's versions |
+| `TestKeyVaultDeleteSecret` | Delete a secret, then confirm it is gone |

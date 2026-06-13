@@ -131,6 +131,7 @@ func setup() (func(), error) {
 		"-aad-addr", "127.0.0.1:0",
 		"-arm-addr", "127.0.0.1:0",
 		"-servicebus-addr", "127.0.0.1:0",
+		"-keyvault-addr", "127.0.0.1:0",
 		"-tls-cert", certPath,
 		"-tls-key", keyPath,
 		"-data", filepath.Join(tmp, "data"))
