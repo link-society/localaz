@@ -1,11 +1,6 @@
 version: "3"
 
 vars:
-  ACCOUNT: devstoreaccount1
-  HOST: 127.0.0.1
-  PORT: "10000"
-  QUEUE_PORT: "10001"
-  TABLE_PORT: "10002"
   IMAGE: localaz:dev
   BIN: ./out/localaz
 
@@ -24,7 +19,7 @@ tasks:
     desc: Build and run localaz locally
     deps: [build]
     cmds:
-      - "{{.BIN}} -addr :{{.PORT}} -data ./data"
+      - "{{.BIN}} -data ./data"
 
   lint:
     desc: Check formatting and run go vet
