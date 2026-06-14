@@ -67,7 +67,7 @@ docs/                          Hugo documentation site (content/, layouts/, stat
 
 | Service     | Port    | Protocol          | Flag / env                                       |
 | ----------- | ------- | ----------------- | ------------------------------------------------ |
-| Blob        | `10000` | HTTP/REST         | `-addr` / `LOCALAZ_BLOB_ADDR`                    |
+| Blob        | `10000` | HTTP/REST         | `-blob-addr` / `LOCALAZ_BLOB_ADDR`              |
 | Queue       | `10001` | HTTP/REST         | `-queue-addr` / `LOCALAZ_QUEUE_ADDR`             |
 | Table       | `10002` | HTTP/REST (OData) | `-table-addr` / `LOCALAZ_TABLE_ADDR`             |
 | Event Grid  | `10003` | HTTP/REST         | `-eventgrid-addr` / `LOCALAZ_EVENTGRID_ADDR`     |
@@ -78,13 +78,11 @@ docs/                          Hugo documentation site (content/, layouts/, stat
 | Key Vault   | `10008` | HTTP/REST (HTTPS) | `-keyvault-addr` / `LOCALAZ_KEYVAULT_ADDR`       |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
 
-The blob flag is still `-addr` (not `-blob-addr`) for back-compat with Azurite
-tooling; do not rename it. Blob, Queue and Table deliberately occupy Azurite's
-`UseDevelopmentStorage=true` ports (`10000`/`10001`/`10002`), which is why the
-pub/sub services moved to `10003`/`10004`/`10005` and the control plane (AAD,
-ARM) to `10006`/`10007` with Key Vault on `10008`. Every HTTP service is served
-over TLS — localaz auto-generates a self-signed cert
-(`<data>/tls/localaz.{crt,key}`) on startup unless you supply
+Blob, Queue and Table occupy the standard local-development storage ports
+(`10000`/`10001`/`10002`), the pub/sub services take `10003`/`10004`/`10005`,
+and the control plane (AAD, ARM) takes `10006`/`10007` with Key Vault on
+`10008`. Every HTTP service is served over TLS — localaz auto-generates a
+self-signed cert (`<data>/tls/localaz.{crt,key}`) on startup unless you supply
 `-tls-cert`/`-tls-key`. Service Bus (AMQP) is the only plaintext listener.
 
 ## Conventions
@@ -219,9 +217,9 @@ same image.
   type is not comparable to the literal's type), evaluates to false for *all*
   operators including `ne`: a `$filter` selects only entities that have the
   property and satisfy the comparison, so `Status ne 'active'` does not match an
-  entity that has no `Status` at all. Note that Azure and Azurite are themselves
-  inconsistent/buggy on null/missing-property filters, so this is a deliberate,
-  documented choice rather than verified Azure parity. The recursive-descent
+  entity that has no `Status` at all. Azure itself is inconsistent on
+  null/missing-property filters, so this is a deliberate, documented choice
+  rather than verified Azure parity. The recursive-descent
   parser caps parenthesis nesting at `maxFilterDepth` (64) so attacker-supplied
   deeply nested `(` cannot overflow the goroutine stack; input past the limit
   returns `errFilter`. The `$filter` and KQL parsers now have direct in-package
