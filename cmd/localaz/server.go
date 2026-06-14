@@ -35,16 +35,47 @@ type amqpService struct {
 // listener fails, then gracefully shuts them all down. It returns the listener
 // error (if any) so main can decide the process exit code; a serve failure on
 // one listener no longer hard-kills the others via os.Exit.
-func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqpService, tlsCert *tls.Certificate) error {
+//
+// Every listener is bound up front (so a bind failure is reported before the
+// emulator is declared ready), the plain-HTTP management server is served first
+// so it can answer 503 on its health endpoint during startup, and the
+// management server is flipped to ready only once every other listener is bound
+// and serving.
+func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqpService, mgmt *managementServer, tlsCert *tls.Certificate) error {
 	var wg sync.WaitGroup
-	servers := make([]*http.Server, 0, len(services))
 
-	// Bind the AMQP listener before starting any serve goroutine so a bind
-	// failure here is returned cleanly without leaving HTTP servers running.
+	// Bind every listener before serving so a bind failure is surfaced before
+	// the emulator declares itself ready. Listeners are closed on early failure.
+	var listeners []net.Listener
+	closeListeners := func() {
+		for _, ln := range listeners {
+			_ = ln.Close()
+		}
+	}
+
+	mgmtListener, err := net.Listen("tcp", mgmt.addr)
+	if err != nil {
+		return fmt.Errorf("listen management: %w", err)
+	}
+	listeners = append(listeners, mgmtListener)
+
+	svcListeners := make([]net.Listener, len(services))
+	for i, svc := range services {
+		ln, err := net.Listen("tcp", svc.addr)
+		if err != nil {
+			closeListeners()
+			return fmt.Errorf("listen %s: %w", svc.name, err)
+		}
+		svcListeners[i] = ln
+		listeners = append(listeners, ln)
+	}
+
 	amqpListener, err := net.Listen("tcp", amqp.addr)
 	if err != nil {
+		closeListeners()
 		return fmt.Errorf("listen servicebus: %w", err)
 	}
+	listeners = append(listeners, amqpListener)
 
 	// errc carries the first non-graceful serve error from any goroutine. It is
 	// buffered so a goroutine never blocks on send, and we only read one value.
@@ -57,23 +88,41 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 		}
 	}
 
-	for _, svc := range services {
+	httpServers := make([]*http.Server, 0, len(services)+1)
+
+	// Serve the management server first so its health endpoint can report 503
+	// while the rest comes up; it stays plain HTTP so a probe needs no TLS
+	// trust material.
+	mgmtSrv := &http.Server{
+		Handler:           logRequests(logger.With("service", "management"), mgmt.handler()),
+		ReadHeaderTimeout: 30 * time.Second,
+	}
+	httpServers = append(httpServers, mgmtSrv)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Info("service listening", "service", "management", "addr", mgmt.addr, "tls", false)
+		if err := mgmtSrv.Serve(mgmtListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			reportErr("management", err)
+		}
+	}()
+
+	for i, svc := range services {
 		srv := &http.Server{
-			Addr:              svc.addr,
 			Handler:           logRequests(logger.With("service", svc.name), svc.handler),
 			ReadHeaderTimeout: 30 * time.Second,
+			TLSConfig:         &tls.Config{Certificates: []tls.Certificate{*tlsCert}},
 		}
-		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*tlsCert}}
-		servers = append(servers, srv)
+		httpServers = append(httpServers, srv)
 
 		wg.Add(1)
-		go func(svc service, srv *http.Server) {
+		go func(svc service, srv *http.Server, ln net.Listener) {
 			defer wg.Done()
 			logger.Info("service listening", "service", svc.name, "addr", svc.addr, "tls", true)
-			if err := srv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := srv.ServeTLS(ln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				reportErr(svc.name, err)
 			}
-		}(svc, srv)
+		}(svc, srv, svcListeners[i])
 	}
 
 	wg.Add(1)
@@ -85,6 +134,11 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 		}
 	}()
 
+	// Every listener is bound and serving: the emulator is ready, so the
+	// management server's health endpoint flips from 503 to 200.
+	mgmt.ready.Store(true)
+	logger.Info("all services ready")
+
 	// Shut down on either a cancelled context or the first serve failure.
 	var runErr error
 	select {
@@ -94,7 +148,7 @@ func run(ctx context.Context, logger *slog.Logger, services []service, amqp amqp
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	for _, srv := range servers {
+	for _, srv := range httpServers {
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error("graceful shutdown failed", "err", err)
 		}

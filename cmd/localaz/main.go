@@ -33,10 +33,16 @@ import (
 func main() {
 	cfg := parseFlags()
 
+	// In healthcheck mode the binary is a thin probe of a running emulator's
+	// health endpoint (used by the container HEALTHCHECK), then exits.
+	if cfg.healthcheck {
+		os.Exit(runHealthcheck(cfg.managementAddr))
+	}
+
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
-	tlsCert, err := loadTLS(logger, cfg.dataDir, cfg.tlsCertFile, cfg.tlsKeyFile, cfg.advertiseHost)
+	tlsCert, certPEM, keyPEM, err := loadTLS(logger, cfg.dataDir, cfg.tlsCertFile, cfg.tlsKeyFile, cfg.advertiseHost)
 	fatal(logger, "init tls", err)
 	blobStore, err := fsstore.New(cfg.dataDir)
 	fatal(logger, "init blob store", err)
@@ -73,11 +79,12 @@ func main() {
 	}
 
 	amqp := amqpService{addr: cfg.serviceBusAddr, server: sbserver.New(sbstore.New())}
+	mgmt := newManagementServer(cfg.managementAddr, certPEM, keyPEM)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx, logger, services, amqp, tlsCert); err != nil {
+	if err := run(ctx, logger, services, amqp, mgmt, tlsCert); err != nil {
 		os.Exit(1)
 	}
 }

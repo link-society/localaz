@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -48,7 +51,7 @@ func TestRunReturnsErrorOnBindFailure(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- run(ctx, logger, services, amqp, testCert(t))
+		done <- run(ctx, logger, services, amqp, newManagementServer("127.0.0.1:0", nil, nil), testCert(t))
 	}()
 
 	select {
@@ -59,6 +62,83 @@ func TestRunReturnsErrorOnBindFailure(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("run did not return within 5s on a bind failure (it hung or os.Exited instead of graceful shutdown)")
 	}
+}
+
+// TestRunManagementEndpoints verifies the plain-HTTP management server: its
+// health endpoint answers 200 once run has brought every listener up, and it
+// serves the certificate and key PEM it was given. The health probe is the
+// signal a container HEALTHCHECK and the test suites wait on, so a
+// wait-with-timeout for "healthcheck OK" mirrors how the suites gate on
+// readiness.
+func TestRunManagementEndpoints(t *testing.T) {
+	mgmtLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve management port: %v", err)
+	}
+	mgmtAddr := mgmtLn.Addr().String()
+	mgmtLn.Close()
+
+	certPEM, keyPEM, err := devcert.Generate()
+	if err != nil {
+		t.Fatalf("generate cert: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(testWriter{t}, nil))
+	services := []service{{name: "ok", addr: "127.0.0.1:0", handler: nopHandler{}}}
+	amqp := amqpService{addr: "127.0.0.1:0", server: sbserver.New(sbstore.New())}
+	mgmt := newManagementServer(mgmtAddr, certPEM, keyPEM)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, logger, services, amqp, mgmt, testCert(t))
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+
+	base := "http://" + mgmtAddr
+
+	// Wait (with timeout) for "healthcheck OK".
+	if err := waitForHealth(base+"/health", 5*time.Second); err != nil {
+		t.Fatalf("health endpoint never reported ready: %v", err)
+	}
+
+	// The certificate and key are served verbatim.
+	for path, want := range map[string][]byte{
+		"/certs/pubkey":  certPEM,
+		"/certs/privkey": keyPEM,
+	} {
+		resp, err := http.Get(base + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", path, resp.StatusCode)
+		}
+		if !bytes.Equal(body, want) {
+			t.Fatalf("GET %s body does not match the served PEM", path)
+		}
+	}
+}
+
+// waitForHealth polls url until it returns 200 or the timeout elapses.
+func waitForHealth(url string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("health endpoint not ready within %s: %s", timeout, url)
 }
 
 // nopHandler is a do-nothing http.Handler for wiring services in tests.

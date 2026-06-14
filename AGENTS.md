@@ -77,13 +77,26 @@ docs/                          Hugo documentation site (content/, layouts/, stat
 | Resource Mgr| `10007` | HTTP/REST (HTTPS) | `-arm-addr` / `LOCALAZ_ARM_ADDR`                 |
 | Key Vault   | `10008` | HTTP/REST (HTTPS) | `-keyvault-addr` / `LOCALAZ_KEYVAULT_ADDR`       |
 | Service Bus | `5672`  | AMQP 1.0 over TCP | `-servicebus-addr` / `LOCALAZ_SERVICEBUS_ADDR`   |
+| Management  | `8000`  | HTTP (plaintext)  | `-management-addr` / `LOCALAZ_MANAGEMENT_ADDR`   |
 
 Blob, Queue and Table occupy the standard local-development storage ports
 (`10000`/`10001`/`10002`), the pub/sub services take `10003`/`10004`/`10005`,
 and the control plane (AAD, ARM) takes `10006`/`10007` with Key Vault on
 `10008`. Every HTTP service is served over TLS — localaz auto-generates a
 self-signed cert (`<data>/tls/localaz.{crt,key}`) on startup unless you supply
-`-tls-cert`/`-tls-key`. Service Bus (AMQP) is the only plaintext listener.
+`-tls-cert`/`-tls-key`. Service Bus (AMQP) and the management server are the
+only plaintext listeners.
+
+The **management** server (port `8000`, plain HTTP, in
+`cmd/localaz/management.go`) is not an emulated Azure service: it hosts
+cross-cutting operational endpoints, with room for more (e.g. Prometheus
+metrics) later. Today it exposes `GET /health` (`200` once every other listener
+is bound and serving, `503` until then) and serves the TLS material at
+`GET /certs/pubkey` and `GET /certs/privkey`. `run` binds every listener up
+front and flips the probe to ready only after they are all serving. `localaz
+-healthcheck` is a built-in probe of `/health` (exit `0` when ready, `1`
+otherwise) that backs the Docker `HEALTHCHECK` in the shell-less distroless
+image.
 
 ## Conventions
 

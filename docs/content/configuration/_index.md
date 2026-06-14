@@ -3,6 +3,18 @@ title: "Configuration"
 weight: 4
 ---
 
+## Management Configuration
+
+The management server is a single plain-HTTP listener (no TLS) hosting
+cross-cutting operational endpoints: a `/health` readiness probe and the
+self-signed certificate at `/certs/pubkey` and `/certs/privkey`. See
+[Services](/services) for details.
+
+| Description | Flag | Environment variable | Default |
+| ----------- | ---- | -------------------- | ------- |
+| Management server address | `-management-addr` | `LOCALAZ_MANAGEMENT_ADDR` | `:8000` |
+
+
 ## Service Configuration
 
 | Service | Flag | Environment variable | Default |

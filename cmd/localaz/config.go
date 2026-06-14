@@ -17,11 +17,13 @@ type config struct {
 	armAddr        string
 	keyVaultAddr   string
 	serviceBusAddr string
+	managementAddr string
 	dataDir        string
 	cloudName      string
 	advertiseHost  string
 	tlsCertFile    string
 	tlsKeyFile     string
+	healthcheck    bool
 }
 
 // parseFlags resolves configuration from command-line flags, falling back to
@@ -38,11 +40,13 @@ func parseFlags() config {
 	flag.StringVar(&c.armAddr, "arm-addr", envOr("LOCALAZ_ARM_ADDR", ":10007"), "resource manager (arm) service listen address")
 	flag.StringVar(&c.keyVaultAddr, "keyvault-addr", envOr("LOCALAZ_KEYVAULT_ADDR", ":10008"), "key vault service listen address")
 	flag.StringVar(&c.serviceBusAddr, "servicebus-addr", envOr("LOCALAZ_SERVICEBUS_ADDR", ":5672"), "service bus AMQP listen address")
+	flag.StringVar(&c.managementAddr, "management-addr", envOr("LOCALAZ_MANAGEMENT_ADDR", ":8000"), "management service listen address: health probe, certificates, and future endpoints (plain HTTP, no TLS)")
 	flag.StringVar(&c.dataDir, "data", envOr("LOCALAZ_DATA_DIR", "/data"), "directory for persisted state")
 	flag.StringVar(&c.cloudName, "arm-cloud-name", envOr("LOCALAZ_ARM_CLOUD_NAME", "localaz"), "cloud name advertised by the ARM metadata document")
 	flag.StringVar(&c.advertiseHost, "advertise-host", envOr("LOCALAZ_ADVERTISE_HOST", "127.0.0.1"), "host clients use to reach the control-plane services")
 	flag.StringVar(&c.tlsCertFile, "tls-cert", envOr("LOCALAZ_TLS_CERT", ""), "PEM certificate to serve TLS with (a self-signed one is generated when unset)")
 	flag.StringVar(&c.tlsKeyFile, "tls-key", envOr("LOCALAZ_TLS_KEY", ""), "PEM private key matching -tls-cert")
+	flag.BoolVar(&c.healthcheck, "healthcheck", false, "probe the management server's health endpoint and exit (0 ready, 1 otherwise); used by the container HEALTHCHECK")
 	flag.Parse()
 	return c
 }

@@ -28,11 +28,11 @@ COPY --from=build --chown=65532:65532 /data /data
 # Persisted emulator state. Mount a volume here to keep data across restarts.
 VOLUME ["/data"]
 
-# Azure Blob service. This matches Azurite's default blob port so existing
-# tooling and connection strings work unchanged.
-EXPOSE 10000
+ENV LOCALAZ_DATA_DIR="/data"
 
-ENV LOCALAZ_BLOB_ADDR=":10000" \
-    LOCALAZ_DATA_DIR="/data"
+# Probe readiness with the binary itself: the distroless image has no shell or
+# curl, and `localaz -healthcheck` exits 0 only once every service is listening.
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+    CMD ["/usr/local/bin/localaz", "-healthcheck"]
 
 ENTRYPOINT ["/usr/local/bin/localaz"]
