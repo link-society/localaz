@@ -118,9 +118,15 @@ func setup() (func(), error) {
 	queueEndpoint = fmt.Sprintf("https://%s/%s", queueAddr, account)
 	tableEndpoint = fmt.Sprintf("https://%s/%s", tableAddr, account)
 
+	managementAddr, err := oneFreeAddr()
+	if err != nil {
+		os.RemoveAll(tmp)
+		return nil, err
+	}
+
 	// Bind every service we do not exercise to an ephemeral port so the suite
-	// never collides with a real Azurite, the control-plane suite, or a previous
-	// run.
+	// never collides with a real storage emulator, the control-plane suite, or a
+	// previous run.
 	srv := exec.Command(bin,
 		"-blob-addr", blobAddr,
 		"-queue-addr", queueAddr,
@@ -132,6 +138,7 @@ func setup() (func(), error) {
 		"-arm-addr", "127.0.0.1:0",
 		"-servicebus-addr", "127.0.0.1:0",
 		"-keyvault-addr", "127.0.0.1:0",
+		"-management-addr", managementAddr,
 		"-tls-cert", certPath,
 		"-tls-key", keyPath,
 		"-data", filepath.Join(tmp, "data"))
@@ -139,6 +146,15 @@ func setup() (func(), error) {
 	if err := srv.Start(); err != nil {
 		os.RemoveAll(tmp)
 		return nil, fmt.Errorf("start emulator: %w", err)
+	}
+
+	// Wait (with timeout) for the emulator's health endpoint to report ready
+	// before issuing any CLI command. The management server is plain HTTP, so
+	// this needs no TLS trust material.
+	if err := waitForHealth("http://"+managementAddr+"/health", 15*time.Second); err != nil {
+		_ = srv.Process.Kill()
+		os.RemoveAll(tmp)
+		return nil, err
 	}
 
 	client := insecureClient()
@@ -206,6 +222,15 @@ func freePort() (int, error) {
 	}
 	defer ln.Close()
 	return ln.Addr().(*net.TCPAddr).Port, nil
+}
+
+// oneFreeAddr reserves a single loopback address with a free port.
+func oneFreeAddr() (string, error) {
+	p, err := freePort()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("127.0.0.1:%d", p), nil
 }
 
 func connectionString() string {
@@ -299,6 +324,24 @@ func waitForReadyClient(client *http.Client, url string) error {
 		time.Sleep(150 * time.Millisecond)
 	}
 	return fmt.Errorf("endpoint did not become ready: %s", url)
+}
+
+// waitForHealth polls the plain-HTTP health endpoint until it reports ready
+// (200) or the timeout elapses.
+func waitForHealth(url string, timeout time.Duration) error {
+	client := &http.Client{Timeout: 3 * time.Second}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return fmt.Errorf("health endpoint did not report ready: %s", url)
 }
 
 // seedLogs ingests a few records into the AppLogs_CL custom table through the
